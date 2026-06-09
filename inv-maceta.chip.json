@@ -1,0 +1,51 @@
+{
+  "name": "inv-maceta",
+  "author": "UNHEVAL",
+  "pins": ["GND", "VCC", "SCL", "SDA", "R_BOMBA", "R_VENT", "R_PULV", "BUZZER"],
+  "controls": [
+    {
+      "id": "i2cAddr",
+      "label": "I2C Address (0-7)",
+      "type": "range",
+      "min": 0,
+      "max": 7,
+      "step": 1
+    },
+    {
+      "id": "temperature",
+      "label": "Temperature (C)",
+      "type": "range",
+      "min": -10,
+      "max": 60,
+      "step": 0.1
+    },
+    {
+      "id": "humAmb",
+      "label": "Humidity Ambient (%)",
+      "type": "range",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "id": "humSuelo",
+      "label": "Soil Moisture (%)",
+      "type": "range",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "id": "ph",
+      "label": "pH Value",
+      "type": "range",
+      "min": 0,
+      "max": 14,
+      "step": 0.1
+    }
+  ],
+  "display": {
+    "width": 128,
+    "height": 64
+  }
+}
