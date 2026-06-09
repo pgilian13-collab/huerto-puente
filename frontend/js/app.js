@@ -10,6 +10,7 @@ let currentMaceta = 1;
 let chart = null;
 let pollTimer = null;
 let realtimeSub = null;
+let vistaTabla = false;
 
 // ============================================================
 // INICIALIZACION
@@ -311,7 +312,7 @@ async function toggleActuador(nombre, macetaNum) {
     const ok = await SupabaseClient.enviarComando(actuadorId, nombre, pin, nuevoEstado, dispositivoId);
 
     if (ok) {
-        const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+        const now = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
 
         btn.innerHTML = `<span class="material-icons-round">power_settings_new</span><span class="btn-label">${nuevoEstado}</span>`;
         btn.className = `brutalist-btn ${nuevoEstado === 'ON' ? 'on' : 'off'}`;
@@ -451,8 +452,10 @@ async function cargarHistorico() {
 
     const temporal = {};
     lecturas.forEach(l => {
-        const ts = new Date(l.fecha_hora).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
-        if (!temporal[ts]) temporal[ts] = {};
+        const fecha = new Date(l.fecha_hora);
+        const ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
+        const tsFull = fecha.toLocaleString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
+        if (!temporal[ts]) temporal[ts] = { full: tsFull };
         if (l.sensor_id === ids.temp) temporal[ts].temp = l.valor_lectura;
         if (l.sensor_id === ids.hum_amb) temporal[ts].humAmb = l.valor_lectura;
         if (l.sensor_id === ids.hum_suelo) temporal[ts].humSuelo = l.valor_lectura;
@@ -466,6 +469,38 @@ async function cargarHistorico() {
     chart.data.datasets[2].data = labels.map(k => temporal[k].humAmb || null);
     chart.data.datasets[3].data = labels.map(k => temporal[k].ph || null);
     chart.update();
+
+    const tbody = document.getElementById('dataTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+        labels.forEach(k => {
+            const d = temporal[k];
+            tbody.innerHTML += `<tr>
+                <td>${d.full || k}</td>
+                <td>${d.temp !== undefined ? d.temp.toFixed(1) : '-'}</td>
+                <td>${d.humAmb !== undefined ? d.humAmb.toFixed(1) : '-'}</td>
+                <td>${d.humSuelo !== undefined ? d.humSuelo.toFixed(0) : '-'}</td>
+                <td>${d.ph !== undefined ? d.ph.toFixed(2) : '-'}</td>
+            </tr>`;
+        });
+    }
+}
+
+function toggleVistaDatos() {
+    vistaTabla = !vistaTabla;
+    const chartEl = document.getElementById('chartContainer');
+    const tableEl = document.getElementById('dataTableContainer');
+    const btn = document.getElementById('btnToggleData');
+
+    if (vistaTabla) {
+        chartEl.style.display = 'none';
+        tableEl.style.display = 'block';
+        btn.innerHTML = '<span class="material-icons-round">show_chart</span><span>Grafico</span>';
+    } else {
+        chartEl.style.display = 'block';
+        tableEl.style.display = 'none';
+        btn.innerHTML = '<span class="material-icons-round">table_chart</span><span>Tabla</span>';
+    }
 }
 
 // ============================================================

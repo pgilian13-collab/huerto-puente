@@ -1350,6 +1350,95 @@ body {
 }
 
 /* ============================================================
+   DATA TABLE - BRUTALIST
+   ============================================================ */
+
+.btn-toggle-data {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #111;
+    border: 2px solid #555;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+}
+
+.btn-toggle-data .material-icons-round {
+    font-size: 14px;
+}
+
+.btn-toggle-data:hover {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+}
+
+.data-table-container {
+    max-height: 300px;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+}
+
+.data-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.data-table th {
+    background: #111;
+    border: 2px solid #333;
+    border-bottom: 3px solid var(--accent-green);
+    color: var(--accent-green);
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.data-table td {
+    background: #0a0a0a;
+    border: 1px solid #222;
+    color: var(--text-primary);
+    padding: 6px 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.data-table tbody tr:hover td {
+    background: #111;
+    border-color: #444;
+}
+
+.data-table-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.data-table-container::-webkit-scrollbar-track {
+    background: #111;
+}
+
+.data-table-container::-webkit-scrollbar-thumb {
+    background: #333;
+    border: 1px solid #555;
+}
+
+/* ============================================================
    CONFIG â€” BRUTALIST
    ============================================================ */
 

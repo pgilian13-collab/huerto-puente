@@ -420,9 +420,28 @@
                 <div class="panel-header">
                     <span class="material-icons-round">timeline</span>
                     <h3>Historico - Ultimas 24 Horas</h3>
+                    <button class="btn-toggle-data" id="btnToggleData" onclick="toggleVistaDatos()">
+                        <span class="material-icons-round">table_chart</span>
+                        <span>Tabla</span>
+                    </button>
                 </div>
-                <div class="chart-container">
+                <div class="chart-container" id="chartContainer">
                     <canvas id="chartHistorico"></canvas>
+                </div>
+                <div class="data-table-container" id="dataTableContainer" style="display:none;">
+                    <table class="data-table" id="dataTable">
+                        <thead>
+                            <tr>
+                                <th>Hora</th>
+                                <th>Temp °C</th>
+                                <th>HumAmb %</th>
+                                <th>HumSuelo %</th>
+                                <th>pH</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
