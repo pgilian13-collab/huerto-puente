@@ -159,17 +159,49 @@ async function cargarDatos() {
             if (l.sensor_id === ids.ph) data.ph = l.valor_lectura;
         });
         actualizarSensores(data);
+    } else {
+        resetSensores();
     }
 
     const actuadores = await SupabaseClient.getActuadores(currentInv);
     if (actuadores) {
         actualizarActuadores(actuadores);
+    } else {
+        resetActuadores();
     }
 }
 
 // ============================================================
 // UI SENSORES
 // ============================================================
+
+function resetSensores() {
+    ['temp', 'humAmb', 'humSuelo', 'ph'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '-';
+    });
+    ['tempStatus', 'humAmbStatus', 'humSueloStatus', 'phStatus'].forEach(id => {
+        setSensorStatus(id, '');
+    });
+}
+
+function resetActuadores() {
+    ['bomba', 'ventilador', 'pulverizador', 'buzzer'].forEach(nombre => {
+        const btn = document.getElementById(`btn-${nombre}`);
+        const card = document.getElementById(`act-${nombre}`);
+        const led = document.getElementById(`${nombre}-led`);
+        const fill = document.getElementById(`${nombre}-fill`);
+        const lastEl = document.getElementById(`${nombre}-last`);
+        if (btn) {
+            btn.innerHTML = `<span class="material-icons-round">power_settings_new</span><span class="btn-label">OFF</span>`;
+            btn.className = 'brutalist-btn off';
+        }
+        if (card) card.classList.remove('active');
+        if (led) led.classList.remove('active');
+        if (fill) fill.style.width = '0%';
+        if (lastEl) lastEl.textContent = '--:--';
+    });
+}
 
 function actualizarSensores(data) {
     if (data.temp !== undefined) {

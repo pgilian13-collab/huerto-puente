@@ -1806,8 +1806,12 @@ body {
         height: 30px;
     }
 
+    .header-left .logo-img:nth-child(2) {
+        display: none;
+    }
+
     .header-title {
-        font-size: 11px;
+        font-size: 12px;
         letter-spacing: 1px;
     }
 
@@ -2114,8 +2118,12 @@ body {
         height: 24px;
     }
 
+    .header-left .logo-img:nth-child(2) {
+        display: none;
+    }
+
     .header-title {
-        font-size: 10px;
+        font-size: 11px;
     }
 
     .inv-tabs {
