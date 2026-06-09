@@ -46,6 +46,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     loader.classList.add('hidden');
     setTimeout(() => loader.remove(), 500);
 
+    initSensorModals();
+
     const fab = document.getElementById('fabConfig');
     const modal = document.getElementById('configModal');
     const closeBtn = document.getElementById('modalClose');
@@ -531,3 +533,195 @@ function toggleVistaDatos() {
         if (c.ph_max !== undefined) document.getElementById('cfg-ph-max').value = c.ph_max;
     }
 })();
+
+// ============================================================
+// MODAL DETALLE SENSOR - CLICK EN TARJETA
+// ============================================================
+
+let sensorChart = null;
+let sensorModalData = [];
+
+const SENSOR_CONFIG = {
+    temp:     { icon: 'thermostat',             label: 'Temperatura',      unit: '°C',  color: '#ef4444', key: 'temp' },
+    hum_amb:  { icon: 'water_drop',             label: 'Humedad Ambiente', unit: '%',   color: '#06b6d4', key: 'hum_amb' },
+    hum_suelo:{ icon: 'grass',                  label: 'Humedad Suelo',    unit: '%',   color: '#22c55e', key: 'hum_suelo' },
+    ph:       { icon: 'science',                label: 'pH Suelo',         unit: 'pH',  color: '#a855f7', key: 'ph' }
+};
+
+function initSensorModals() {
+    const cards = document.querySelectorAll('.sensor-card');
+    cards.forEach(card => {
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', () => {
+            const tipo = card.dataset.sensor;
+            if (tipo && SENSOR_CONFIG[tipo]) abrirSensorModal(tipo);
+        });
+    });
+
+    const closeBtn = document.getElementById('sensorModalClose');
+    const modal = document.getElementById('sensorModal');
+    if (closeBtn) closeBtn.addEventListener('click', () => modal.classList.remove('active'));
+    if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+
+    document.getElementById('sensorTabTabla').addEventListener('click', () => switchSensorView('tabla'));
+    document.getElementById('sensorTabGrafico').addEventListener('click', () => switchSensorView('grafico'));
+}
+
+function switchSensorView(view) {
+    document.getElementById('sensorTabTabla').classList.toggle('active', view === 'tabla');
+    document.getElementById('sensorTabGrafico').classList.toggle('active', view === 'grafico');
+    document.getElementById('sensorTablaView').style.display = view === 'tabla' ? 'block' : 'none';
+    document.getElementById('sensorGraficoView').style.display = view === 'grafico' ? 'block' : 'none';
+    if (view === 'grafico' && sensorChart) sensorChart.update();
+}
+
+function getSensorEstado(valor, tipo) {
+    const c = CONFIG;
+    if (tipo === 'temp') {
+        if (valor < c.TEMP_MIN || valor > c.TEMP_MAX) return valor < c.TEMP_MIN - 3 || valor > c.TEMP_MAX + 3 ? 'danger' : 'alert';
+    } else if (tipo === 'hum_suelo') {
+        if (valor < c.HUM_SUELO_MIN || valor > c.HUM_SUELO_MAX) return valor < c.HUM_SUELO_MIN - 10 || valor > c.HUM_SUELO_MAX + 10 ? 'danger' : 'alert';
+    } else if (tipo === 'ph') {
+        if (valor < c.PH_MIN || valor > c.PH_MAX) return valor < c.PH_MIN - 0.5 || valor > c.PH_MAX + 0.5 ? 'danger' : 'alert';
+    } else if (tipo === 'hum_amb') {
+        if (valor < 30 || valor > 85) return valor < 20 || valor > 90 ? 'danger' : 'alert';
+    }
+    return 'ok';
+}
+
+async function abrirSensorModal(tipo) {
+    const cfg = SENSOR_CONFIG[tipo];
+    const dispositivoId = currentInv + 1;
+    const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
+    const sensorId = ids[cfg.key];
+
+    document.getElementById('sensorModalIcon').textContent = cfg.icon;
+    document.getElementById('sensorModalTitle').textContent = cfg.label + ' - Maceta ' + currentMaceta;
+    document.getElementById('sensorTablaCol').textContent = cfg.label + ' (' + cfg.unit + ')';
+    document.getElementById('sensorModal').classList.add('active');
+    switchSensorView('tabla');
+
+    const lecturas = await SupabaseClient.query('monitoreo_lecturas',
+        `sensor_id=eq.${sensorId}&order=fecha_hora.desc&limit=100`
+    );
+
+    sensorModalData = (lecturas || []).reverse();
+    renderSensorTabla(sensorModalData, cfg);
+    renderSensorGrafico(sensorModalData, cfg);
+    renderSensorStats(sensorModalData, cfg);
+}
+
+function renderSensorTabla(data, cfg) {
+    const tbody = document.getElementById('sensorTablaBody');
+    tbody.innerHTML = '';
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-secondary);">Sin datos</td></tr>';
+        return;
+    }
+    data.forEach(l => {
+        const estado = getSensorEstado(l.valor_lectura, cfg.key);
+        const fecha = new Date(l.fecha_hora);
+        const ts = fecha.toLocaleString('es-PE', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', timeZone:'America/Lima' });
+        const estadoLabel = estado === 'ok' ? 'Estable' : estado === 'alert' ? 'Alerta' : 'Peligro';
+        tbody.innerHTML += `<tr class="row-${estado}">
+            <td>${ts}</td>
+            <td>${l.valor_lectura.toFixed(cfg.key === 'ph' ? 2 : 1)} ${cfg.unit}</td>
+            <td><span class="sensor-estado-badge ${estado}">${estadoLabel}</span></td>
+        </tr>`;
+    });
+}
+
+function renderSensorGrafico(data, cfg) {
+    const ctx = document.getElementById('sensorChart');
+    if (sensorChart) sensorChart.destroy();
+
+    const labels = data.map(l => {
+        const d = new Date(l.fecha_hora);
+        return d.toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit', timeZone:'America/Lima' });
+    });
+    const values = data.map(l => l.valor_lectura);
+
+    const bgColors = data.map(l => {
+        const e = getSensorEstado(l.valor_lectura, cfg.key);
+        return e === 'ok' ? 'rgba(34,197,94,0.15)' : e === 'alert' ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.25)';
+    });
+
+    const limitMin = cfg.key === 'temp' ? CONFIG.TEMP_MIN : cfg.key === 'hum_suelo' ? CONFIG.HUM_SUELO_MIN : cfg.key === 'ph' ? CONFIG.PH_MIN : 30;
+    const limitMax = cfg.key === 'temp' ? CONFIG.TEMP_MAX : cfg.key === 'hum_suelo' ? CONFIG.HUM_SUELO_MAX : cfg.key === 'ph' ? CONFIG.PH_MAX : 85;
+
+    sensorChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: cfg.label,
+                data: values,
+                borderColor: cfg.color,
+                backgroundColor: bgColors,
+                borderWidth: 2,
+                pointRadius: 3,
+                pointBackgroundColor: data.map(l => {
+                    const e = getSensorEstado(l.valor_lectura, cfg.key);
+                    return e === 'ok' ? '#22c55e' : e === 'alert' ? '#f59e0b' : '#ef4444';
+                }),
+                pointBorderColor: data.map(l => {
+                    const e = getSensorEstado(l.valor_lectura, cfg.key);
+                    return e === 'ok' ? '#22c55e' : e === 'alert' ? '#f59e0b' : '#ef4444';
+                }),
+                fill: true,
+                tension: 0.3
+            }, {
+                label: 'Min',
+                data: Array(labels.length).fill(limitMin),
+                borderColor: 'rgba(245,158,11,0.5)',
+                borderWidth: 1,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                fill: false
+            }, {
+                label: 'Max',
+                data: Array(labels.length).fill(limitMax),
+                borderColor: 'rgba(239,68,68,0.5)',
+                borderWidth: 1,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, labels: { color: '#aaa', font: { family: 'JetBrains Mono', size: 10 } } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(cfg.key === 'ph' ? 2 : 1) : '-') + ' ' + cfg.unit
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { color: '#666', font: { family: 'JetBrains Mono', size: 9 }, maxRotation: 45 }, grid: { color: '#1a1a1a' } },
+                y: { ticks: { color: '#666', font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: '#1a1a1a' } }
+            }
+        }
+    });
+}
+
+function renderSensorStats(data, cfg) {
+    const container = document.getElementById('sensorStats');
+    if (data.length === 0) { container.innerHTML = ''; return; }
+    const vals = data.map(l => l.valor_lectura);
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const alertCount = data.filter(l => getSensorEstado(l.valor_lectura, cfg.key) !== 'ok').length;
+    const okCount = data.length - alertCount;
+
+    container.innerHTML = `
+        <div class="sensor-stat-item"><div class="stat-dot ok"></div>Min: ${min.toFixed(cfg.key === 'ph' ? 2 : 1)}${cfg.unit}</div>
+        <div class="sensor-stat-item"><div class="stat-dot alert"></div>Max: ${max.toFixed(cfg.key === 'ph' ? 2 : 1)}${cfg.unit}</div>
+        <div class="sensor-stat-item"><div class="stat-dot ok"></div>Prom: ${avg.toFixed(cfg.key === 'ph' ? 2 : 1)}${cfg.unit}</div>
+        <div class="sensor-stat-item"><div class="stat-dot ok"></div>Estables: ${okCount}</div>
+        <div class="sensor-stat-item"><div class="stat-dot danger"></div>Alertas: ${alertCount}</div>
+    `;
+}
