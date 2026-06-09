@@ -1855,6 +1855,106 @@ body {
 }
 
 /* ============================================================
+   MODAL CONFIG - BRUTALIST OVERLAY
+   ============================================================ */
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-box {
+    background: var(--bg-panel);
+    border: 3px solid #333;
+    box-shadow: 8px 8px 0 rgba(0,0,0,0.8), inset 0 0 40px rgba(0,0,0,0.3);
+    width: 100%;
+    max-width: 520px;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.modal-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg,
+        var(--accent-green),
+        var(--accent-orange),
+        var(--accent-green));
+    animation: scanLine 3s linear infinite;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px;
+    border-bottom: 2px solid #333;
+    background: #111;
+}
+
+.modal-header .material-icons-round {
+    color: var(--accent-orange);
+    font-size: 20px;
+}
+
+.modal-header h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    flex: 1;
+}
+
+.modal-close {
+    background: none;
+    border: 2px solid #555;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.modal-close .material-icons-round {
+    font-size: 18px;
+    color: var(--text-secondary);
+}
+
+.modal-close:hover {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
+.modal-close:hover .material-icons-round {
+    color: var(--accent-red);
+}
+
+.modal-box .config-grid {
+    padding: 16px;
+}
+
+.modal-box .btn-save {
+    margin: 0 16px 16px;
+    width: calc(100% - 32px);
+}
+
+/* ============================================================
    RESPONSIVE - TABLET
    ============================================================ */
 

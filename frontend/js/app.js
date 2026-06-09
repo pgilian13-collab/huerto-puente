@@ -47,10 +47,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     setTimeout(() => loader.remove(), 500);
 
     const fab = document.getElementById('fabConfig');
-    if (fab) {
+    const modal = document.getElementById('configModal');
+    const closeBtn = document.getElementById('modalClose');
+
+    if (fab && modal) {
         fab.addEventListener('click', () => {
-            const panel = document.getElementById('config-panel');
-            if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            modal.classList.add('active');
+        });
+    }
+    if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+    }
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.remove('active');
         });
     }
 });
