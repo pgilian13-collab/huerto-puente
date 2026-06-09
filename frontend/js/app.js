@@ -44,6 +44,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loader = document.getElementById('loader');
     loader.classList.add('hidden');
     setTimeout(() => loader.remove(), 500);
+
+    const fab = document.getElementById('fabConfig');
+    if (fab) {
+        fab.addEventListener('click', () => {
+            const panel = document.getElementById('config-panel');
+            if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
 });
 
 // ============================================================
