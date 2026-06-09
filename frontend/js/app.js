@@ -1,8 +1,8 @@
 /**
  * APP PRINCIPAL - HUERTO UNIVERSITARIO UNHEVAL
  * ==============================================
- * 5 Invernaderos x 4 Macetas x 3 Sensores = 60 Sensores
- * 5 Invernaderos x 4 Actuadores = 20 Actuadores
+ * 5 Invernaderos x 4 Macetas x 4 Sensores = 100 Sensores
+ * 5 Invernaderos x (4 Macetas x 3 Actuadores + 1 Buzzer) = 65 Actuadores
  */
 
 let currentInv = 0;
@@ -91,48 +91,30 @@ function iniciarRealtime() {
         const sid = lectura.sensor_id;
         const val = parseFloat(lectura.valor_lectura);
 
-        const expectedIds = [
-            CONFIG.getSensorId(dispositivoId, currentMaceta, 1),
-            CONFIG.getSensorId(dispositivoId, currentMaceta, 2),
-            CONFIG.getSensorId(dispositivoId, currentMaceta, 3),
-        ];
+        const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
+        const expectedIds = [ids.temp, ids.hum_amb, ids.hum_suelo, ids.ph];
 
         if (!expectedIds.includes(sid)) return;
 
-        const tipo = (sid - 1) % 3 + 1;
-        if (tipo === 1) {
+        if (sid === ids.temp) {
             document.getElementById('temp').textContent = val.toFixed(1);
             setSensorStatus('tempStatus', getTempStatus(val));
-        } else if (tipo === 2) {
+        } else if (sid === ids.hum_amb) {
             document.getElementById('humAmb').textContent = val.toFixed(1);
             setSensorStatus('humAmbStatus', getHumAmbStatus(val));
-        } else if (tipo === 3) {
+        } else if (sid === ids.hum_suelo) {
             document.getElementById('humSuelo').textContent = val.toFixed(0);
             setSensorStatus('humSueloStatus', getHumSueloStatus(val));
+        } else if (sid === ids.ph) {
+            document.getElementById('ph').textContent = val.toFixed(1);
+            setSensorStatus('phStatus', getPhStatus(val));
         }
 
         console.log(`[RT] Sensor ${sid} (MAC${currentMaceta}) -> ${val}`);
     });
 
     SupabaseClient.subscribeActuadores(currentInv, (act) => {
-        const btn = document.getElementById(`btn-${act.nombre}`);
-        const card = document.getElementById(`act-${act.nombre}`);
-        if (!btn) return;
-
-        const isOn = act.estado_actual === 'ON';
-        const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
-
-        btn.innerHTML = `<span class="material-icons-round">power_settings_new</span><span class="btn-label">${isOn ? 'ON' : 'OFF'}</span>`;
-        btn.className = `brutalist-btn ${isOn ? 'on' : 'off'}`;
-        if (card) card.classList.toggle('active', isOn);
-
-        const led = document.getElementById(`${act.nombre}-led`);
-        const fill = document.getElementById(`${act.nombre}-fill`);
-        const lastEl = document.getElementById(`${act.nombre}-last`);
-        if (led) led.classList.toggle('active', isOn);
-        if (fill) fill.style.width = isOn ? '100%' : '0%';
-        if (lastEl && isOn) lastEl.textContent = now;
-
+        updateActuadorUI(act);
         console.log(`[RT] ${act.nombre} -> ${act.estado_actual}`);
     });
 }
@@ -162,23 +144,19 @@ function selectInvernadero(index) {
 
 async function cargarDatos() {
     const dispositivoId = currentInv + 1;
-    const ids = [
-        CONFIG.getSensorId(dispositivoId, currentMaceta, 1),
-        CONFIG.getSensorId(dispositivoId, currentMaceta, 2),
-        CONFIG.getSensorId(dispositivoId, currentMaceta, 3),
-    ];
+    const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
 
     const lecturas = await SupabaseClient.query('monitoreo_lecturas',
-        `sensor_id=in.(${ids.join(',')})&order=fecha_hora.desc&limit=3`
+        `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=4`
     );
 
     if (lecturas && lecturas.length > 0) {
         const data = {};
         lecturas.forEach(l => {
-            const tipo = (l.sensor_id - 1) % 3 + 1;
-            if (tipo === 1) data.temp = l.valor_lectura;
-            if (tipo === 2) data.humAmb = l.valor_lectura;
-            if (tipo === 3) data.humSuelo = l.valor_lectura;
+            if (l.sensor_id === ids.temp) data.temp = l.valor_lectura;
+            if (l.sensor_id === ids.hum_amb) data.humAmb = l.valor_lectura;
+            if (l.sensor_id === ids.hum_suelo) data.humSuelo = l.valor_lectura;
+            if (l.sensor_id === ids.ph) data.ph = l.valor_lectura;
         });
         actualizarSensores(data);
     }
@@ -206,6 +184,10 @@ function actualizarSensores(data) {
         document.getElementById('humSuelo').textContent = data.humSuelo.toFixed(0);
         setSensorStatus('humSueloStatus', getHumSueloStatus(data.humSuelo));
     }
+    if (data.ph !== undefined) {
+        document.getElementById('ph').textContent = data.ph.toFixed(1);
+        setSensorStatus('phStatus', getPhStatus(data.ph));
+    }
 }
 
 function getTempStatus(val) {
@@ -226,6 +208,12 @@ function getHumSueloStatus(val) {
     return '';
 }
 
+function getPhStatus(val) {
+    if (val < 4.5 || val > 9.0) return 'critical';
+    if (val < 5.5 || val > 7.5) return 'warning';
+    return '';
+}
+
 function setSensorStatus(elementId, status) {
     const el = document.getElementById(elementId);
     if (el) el.className = 'card-status ' + status;
@@ -237,37 +225,50 @@ function setSensorStatus(elementId, status) {
 
 function actualizarActuadores(actuadores) {
     actuadores.forEach(act => {
-        const btn = document.getElementById(`btn-${act.nombre}`);
-        const card = document.getElementById(`act-${act.nombre}`);
-        if (!btn) return;
-
-        const isOn = act.estado_actual === 'ON';
-        const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
-
-        btn.innerHTML = `<span class="material-icons-round">power_settings_new</span><span class="btn-label">${isOn ? 'ON' : 'OFF'}</span>`;
-        btn.className = `brutalist-btn ${isOn ? 'on' : 'off'}`;
-        if (card) card.classList.toggle('active', isOn);
-
-        const led = document.getElementById(`${act.nombre}-led`);
-        const fill = document.getElementById(`${act.nombre}-fill`);
-        const lastEl = document.getElementById(`${act.nombre}-last`);
-        if (led) led.classList.toggle('active', isOn);
-        if (fill) fill.style.width = isOn ? '100%' : '0%';
-        if (lastEl && isOn) lastEl.textContent = now;
+        updateActuadorUI(act);
     });
+}
+
+function updateActuadorUI(act) {
+    const btn = document.getElementById(`btn-${act.nombre}`);
+    const card = document.getElementById(`act-${act.nombre}`);
+    if (!btn) return;
+
+    const isOn = act.estado_actual === 'ON';
+    const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+
+    btn.innerHTML = `<span class="material-icons-round">power_settings_new</span><span class="btn-label">${isOn ? 'ON' : 'OFF'}</span>`;
+    btn.className = `brutalist-btn ${isOn ? 'on' : 'off'}`;
+    if (card) card.classList.toggle('active', isOn);
+
+    const led = document.getElementById(`${act.nombre}-led`);
+    const fill = document.getElementById(`${act.nombre}-fill`);
+    const lastEl = document.getElementById(`${act.nombre}-last`);
+    if (led) led.classList.toggle('active', isOn);
+    if (fill) fill.style.width = isOn ? '100%' : '0%';
+    if (lastEl && isOn) lastEl.textContent = now;
 }
 
 // ============================================================
 // TOGGLE ACTUADOR
 // ============================================================
 
-async function toggleActuador(nombre, pin) {
+async function toggleActuador(nombre, macetaNum) {
     const btn = document.getElementById(`btn-${nombre}`);
     const isOn = btn.classList.contains('on');
     const nuevoEstado = isOn ? 'OFF' : 'ON';
-    const actuadorId = CONFIG.ACTUADOR_IDS[nombre][currentInv];
+    const dispositivoId = currentInv + 1;
 
-    const ok = await SupabaseClient.enviarComando(actuadorId, nombre, pin, nuevoEstado);
+    let actuadorId, pin;
+    if (nombre === 'buzzer') {
+        actuadorId = CONFIG.getBuzzerId(dispositivoId);
+        pin = 26;
+    } else {
+        actuadorId = CONFIG.getActuadorId(dispositivoId, macetaNum, nombre === 'bomba' ? 1 : nombre === 'ventilador' ? 2 : 3);
+        pin = CONFIG.PIN_MAP[macetaNum][nombre];
+    }
+
+    const ok = await SupabaseClient.enviarComando(actuadorId, nombre, pin, nuevoEstado, dispositivoId);
 
     if (ok) {
         const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
@@ -295,6 +296,8 @@ async function guardarConfig() {
         temp_max: parseFloat(document.getElementById('cfg-temp-max').value),
         hum_suelo_min: parseFloat(document.getElementById('cfg-hum-min').value),
         hum_suelo_max: parseFloat(document.getElementById('cfg-hum-max').value),
+        ph_min: parseFloat(document.getElementById('cfg-ph-min').value),
+        ph_max: parseFloat(document.getElementById('cfg-ph-max').value),
     };
     localStorage.setItem('huerto_config', JSON.stringify(config));
 
@@ -350,6 +353,17 @@ function initChart() {
                     pointRadius: 2,
                     borderWidth: 2,
                 },
+                {
+                    label: 'pH',
+                    data: [],
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 2,
+                    borderWidth: 2,
+                    yAxisID: 'y1',
+                },
             ],
         },
         options: {
@@ -372,7 +386,13 @@ function initChart() {
             },
             scales: {
                 x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.5)' } },
-                y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.5)' } },
+                y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.5)' }, min: 0, max: 100 },
+                y1: {
+                    position: 'right',
+                    ticks: { color: '#a855f7', font: { size: 10 } },
+                    grid: { drawOnChartArea: false },
+                    min: 0, max: 14,
+                },
             },
         },
     });
@@ -382,14 +402,10 @@ function initChart() {
 
 async function cargarHistorico() {
     const dispositivoId = currentInv + 1;
-    const ids = [
-        CONFIG.getSensorId(dispositivoId, currentMaceta, 1),
-        CONFIG.getSensorId(dispositivoId, currentMaceta, 2),
-        CONFIG.getSensorId(dispositivoId, currentMaceta, 3),
-    ];
+    const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
 
     const lecturas = await SupabaseClient.query('monitoreo_lecturas',
-        `sensor_id=in.(${ids.join(',')})&order=fecha_hora.desc&limit=${CONFIG.CHART_POINTS}`
+        `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=${CONFIG.CHART_POINTS}`
     );
     if (!lecturas || lecturas.length === 0) return;
 
@@ -397,10 +413,10 @@ async function cargarHistorico() {
     lecturas.forEach(l => {
         const ts = new Date(l.fecha_hora).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
         if (!temporal[ts]) temporal[ts] = {};
-        const tipo = (l.sensor_id - 1) % 3 + 1;
-        if (tipo === 1) temporal[ts].temp = l.valor_lectura;
-        if (tipo === 2) temporal[ts].humAmb = l.valor_lectura;
-        if (tipo === 3) temporal[ts].humSuelo = l.valor_lectura;
+        if (l.sensor_id === ids.temp) temporal[ts].temp = l.valor_lectura;
+        if (l.sensor_id === ids.hum_amb) temporal[ts].humAmb = l.valor_lectura;
+        if (l.sensor_id === ids.hum_suelo) temporal[ts].humSuelo = l.valor_lectura;
+        if (l.sensor_id === ids.ph) temporal[ts].ph = l.valor_lectura;
     });
 
     const labels = Object.keys(temporal).reverse();
@@ -408,6 +424,7 @@ async function cargarHistorico() {
     chart.data.datasets[0].data = labels.map(k => temporal[k].temp || null);
     chart.data.datasets[1].data = labels.map(k => temporal[k].humSuelo || null);
     chart.data.datasets[2].data = labels.map(k => temporal[k].humAmb || null);
+    chart.data.datasets[3].data = labels.map(k => temporal[k].ph || null);
     chart.update();
 }
 
@@ -423,5 +440,7 @@ async function cargarHistorico() {
         document.getElementById('cfg-temp-max').value = c.temp_max;
         document.getElementById('cfg-hum-min').value = c.hum_suelo_min;
         document.getElementById('cfg-hum-max').value = c.hum_suelo_max;
+        if (c.ph_min !== undefined) document.getElementById('cfg-ph-min').value = c.ph_min;
+        if (c.ph_max !== undefined) document.getElementById('cfg-ph-max').value = c.ph_max;
     }
 })();

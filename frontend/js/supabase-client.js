@@ -2,7 +2,7 @@
  * CLIENTE SUPABASE
  * =================
  * REST API + Realtime
- * 3 sensores por maceta: Temp, HumAmb, HumSuelo
+ * 4 sensores por maceta: Temp, HumAmb, HumSuelo, pH
  */
 
 const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
@@ -63,9 +63,20 @@ const SupabaseClient = {
         const dispositivoId = invIndex + 1;
         const ids = [];
         for (let m = 1; m <= CONFIG.MACETAS_POR_INV; m++) {
-            ids.push(CONFIG.getSensorId(dispositivoId, m, 1));
-            ids.push(CONFIG.getSensorId(dispositivoId, m, 2));
-            ids.push(CONFIG.getSensorId(dispositivoId, m, 3));
+            for (let t = 1; t <= CONFIG.SENSORES_POR_MACETA; t++) {
+                ids.push(CONFIG.getSensorId(dispositivoId, m, t));
+            }
+        }
+        return this.query('monitoreo_lecturas',
+            `sensor_id=in.(${ids.join(',')})&order=fecha_hora.desc&limit=${limit}`
+        );
+    },
+
+    async getLecturasMaceta(invIndex, macetaNum, limit = 50) {
+        const dispositivoId = invIndex + 1;
+        const ids = [];
+        for (let t = 1; t <= CONFIG.SENSORES_POR_MACETA; t++) {
+            ids.push(CONFIG.getSensorId(dispositivoId, macetaNum, t));
         }
         return this.query('monitoreo_lecturas',
             `sensor_id=in.(${ids.join(',')})&order=fecha_hora.desc&limit=${limit}`
@@ -73,17 +84,24 @@ const SupabaseClient = {
     },
 
     async getActuadores(invIndex) {
-        const ids = [
-            CONFIG.ACTUADOR_IDS.bomba[invIndex],
-            CONFIG.ACTUADOR_IDS.ventilador[invIndex],
-            CONFIG.ACTUADOR_IDS.pulverizador[invIndex],
-            CONFIG.ACTUADOR_IDS.buzzer[invIndex],
-        ];
+        const dispositivoId = invIndex + 1;
+        const ids = [];
+        for (let m = 1; m <= CONFIG.MACETAS_POR_INV; m++) {
+            const acts = CONFIG.getActuadoresMaceta(dispositivoId, m);
+            ids.push(acts.bomba, acts.ventilador, acts.pulverizador);
+        }
+        ids.push(CONFIG.getBuzzerId(dispositivoId));
         return this.query('actuadores', `id=in.(${ids.join(',')})`);
     },
 
-    async enviarComando(actuadorId, nombre, pin, estado) {
-        const dispositivoId = Math.ceil(actuadorId / 4);
+    async getActuadoresMaceta(invIndex, macetaNum) {
+        const dispositivoId = invIndex + 1;
+        const acts = CONFIG.getActuadoresMaceta(dispositivoId, macetaNum);
+        const buzzerId = CONFIG.getBuzzerId(dispositivoId);
+        return this.query('actuadores', `id=in.(${acts.bomba},${acts.ventilador},${acts.pulverizador},${buzzerId})`);
+    },
+
+    async enviarComando(actuadorId, nombre, pin, estado, dispositivoId) {
         return this.insert('control_actuadores', {
             actuador_id: actuadorId,
             dispositivo_id: dispositivoId,
@@ -109,12 +127,6 @@ const SupabaseClient = {
     },
 
     subscribeActuadores(invIndex, callback) {
-        const actuadorIds = [
-            CONFIG.ACTUADOR_IDS.bomba[invIndex],
-            CONFIG.ACTUADOR_IDS.ventilador[invIndex],
-            CONFIG.ACTUADOR_IDS.pulverizador[invIndex],
-            CONFIG.ACTUADOR_IDS.buzzer[invIndex],
-        ];
         return sb
             .channel('actuadores-realtime')
             .on('postgres_changes', {
@@ -122,9 +134,7 @@ const SupabaseClient = {
                 schema: 'public',
                 table: 'actuadores',
             }, (payload) => {
-                if (actuadorIds.includes(payload.new.id)) {
-                    callback(payload.new);
-                }
+                callback(payload.new);
             })
             .subscribe();
     },

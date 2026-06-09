@@ -766,6 +766,7 @@ body {
 .card-icon.temp { background: linear-gradient(135deg, #ef4444, #dc2626); }
 .card-icon.hum-amb { background: linear-gradient(135deg, #06b6d4, #0891b2); }
 .card-icon.hum-suelo { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.card-icon.ph { background: linear-gradient(135deg, #a855f7, #7c3aed); }
 .card-icon.ph { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
 
 .card-status {

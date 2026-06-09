@@ -75,7 +75,6 @@
 
     <!-- MACETA TABS -->
     <nav class="maceta-nav" id="macetaTabs">
-        <!-- Generado por JS -->
     </nav>
 
     <!-- CONTENIDO PRINCIPAL -->
@@ -123,6 +122,20 @@
                     <span class="unit">%</span>
                 </div>
             </div>
+
+            <div class="sensor-card">
+                <div class="card-top">
+                    <div class="card-icon ph">
+                        <span class="material-icons-round">science</span>
+                    </div>
+                    <div class="card-status" id="phStatus"></div>
+                </div>
+                <div class="card-label">pH Suelo</div>
+                <div class="card-value">
+                    <span class="value" id="ph">--</span>
+                    <span class="unit">pH</span>
+                </div>
+            </div>
         </div>
 
         <!-- ACTUADORES -->
@@ -168,7 +181,7 @@
                         <div class="act-info-grid">
                             <div class="act-info-item">
                                 <span class="act-info-label">GPIO</span>
-                                <span class="act-info-val">PIN 13</span>
+                                <span class="act-info-val">VAR</span>
                             </div>
                             <div class="act-info-item">
                                 <span class="act-info-label">MODO</span>
@@ -193,7 +206,7 @@
                             Riego automatizado del sector. Se activa cuando humedad del suelo &lt; 40%.
                         </div>
                     </div>
-                    <button class="brutalist-btn off" id="btn-bomba" onclick="toggleActuador('bomba', 13)">
+                    <button class="brutalist-btn off" id="btn-bomba" onclick="toggleActuador('bomba', currentMaceta)">
                         <span class="material-icons-round">power_settings_new</span>
                         <span class="btn-label">OFF</span>
                     </button>
@@ -234,7 +247,7 @@
                         <div class="act-info-grid">
                             <div class="act-info-item">
                                 <span class="act-info-label">GPIO</span>
-                                <span class="act-info-val">PIN 5</span>
+                                <span class="act-info-val">VAR</span>
                             </div>
                             <div class="act-info-item">
                                 <span class="act-info-label">MODO</span>
@@ -259,7 +272,7 @@
                             Control de temperatura. Se activa cuando temp &gt; 30°C o humedad amb. &gt; 85%.
                         </div>
                     </div>
-                    <button class="brutalist-btn off" id="btn-ventilador" onclick="toggleActuador('ventilador', 5)">
+                    <button class="brutalist-btn off" id="btn-ventilador" onclick="toggleActuador('ventilador', currentMaceta)">
                         <span class="material-icons-round">power_settings_new</span>
                         <span class="btn-label">OFF</span>
                     </button>
@@ -302,7 +315,7 @@
                         <div class="act-info-grid">
                             <div class="act-info-item">
                                 <span class="act-info-label">GPIO</span>
-                                <span class="act-info-val">PIN 14</span>
+                                <span class="act-info-val">VAR</span>
                             </div>
                             <div class="act-info-item">
                                 <span class="act-info-label">MODO</span>
@@ -327,7 +340,7 @@
                             Nebulizacion ambiental. Se activa cuando humedad amb. &lt; 50% o temp &gt; 35°C.
                         </div>
                     </div>
-                    <button class="brutalist-btn off" id="btn-pulverizador" onclick="toggleActuador('pulverizador', 14)">
+                    <button class="brutalist-btn off" id="btn-pulverizador" onclick="toggleActuador('pulverizador', currentMaceta)">
                         <span class="material-icons-round">power_settings_new</span>
                         <span class="btn-label">OFF</span>
                     </button>
@@ -357,7 +370,6 @@
                                     <path d="M21 5 Q27 12 21 19" opacity="0.25"/>
                                     <circle cx="8" cy="13" r="2" fill="#fff" opacity="0.3"/>
                                 </svg>
-                            </div>
                             </div>
                             <div class="act-title-block">
                                 <div class="act-title">BUZZER ALARMA</div>
@@ -394,7 +406,7 @@
                             Alarma sonora de emergencia. Se activa automaticamente ante valores criticos.
                         </div>
                     </div>
-                    <button class="brutalist-btn off" id="btn-buzzer" onclick="toggleActuador('buzzer', 26)">
+                    <button class="brutalist-btn off" id="btn-buzzer" onclick="toggleActuador('buzzer', currentMaceta)">
                         <span class="material-icons-round">power_settings_new</span>
                         <span class="btn-label">OFF</span>
                     </button>
@@ -446,6 +458,20 @@
                         <div class="input-group">
                             <input type="number" id="cfg-hum-max" value="80" min="0" max="100">
                             <span class="input-unit">%</span>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <label>pH Minimo</label>
+                        <div class="input-group">
+                            <input type="number" id="cfg-ph-min" value="5.5" min="0" max="14" step="0.1">
+                            <span class="input-unit">pH</span>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <label>pH Maximo</label>
+                        <div class="input-group">
+                            <input type="number" id="cfg-ph-max" value="7.5" min="0" max="14" step="0.1">
+                            <span class="input-unit">pH</span>
                         </div>
                     </div>
                 </div>
