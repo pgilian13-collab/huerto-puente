@@ -64,22 +64,23 @@ MUX_SIG = ADC(Pin(34))
 MUX_SIG.atten(ADC.ATTN_11DB)
 
 # DHT22 - 1 por maceta
-# NOTA: GPIO9 es pin de boot, no funciona para DHT22. Usar GPIO20.
-DHT_PINS = [Pin(4), Pin(19), Pin(2), Pin(20)]
+# dht1=GPIO4, dht2=GPIO19, dht3=GPIO2, dht4=GPIO13 (segun diagrama Wokwi)
+DHT_PINS = [Pin(4), Pin(19), Pin(2), Pin(13)]
 dht_sensors = [dht.DHT22(p) for p in DHT_PINS]
 
 # Relays - 3 por maceta + buzzer
+# NOTA: GPIO13 se usa para DHT22 MAC-4, bomba MAC-1 usa GPIO32
 RELAYS = {
-    1: {'bomba': Pin(13, Pin.OUT), 'ventilador': Pin(14, Pin.OUT), 'pulverizador': Pin(5, Pin.OUT)},
+    1: {'bomba': Pin(32, Pin.OUT), 'ventilador': Pin(14, Pin.OUT), 'pulverizador': Pin(5, Pin.OUT)},
     2: {'bomba': Pin(23, Pin.OUT), 'ventilador': Pin(0, Pin.OUT),  'pulverizador': Pin(15, Pin.OUT)},
     3: {'bomba': Pin(12, Pin.OUT), 'ventilador': Pin(11, Pin.OUT), 'pulverizador': Pin(10, Pin.OUT)},
     4: {'bomba': Pin(8, Pin.OUT),  'ventilador': Pin(7, Pin.OUT),  'pulverizador': Pin(6, Pin.OUT)},
 }
 buzzer = PWM(Pin(26), Pin.OUT)
 
-# LEDs status
-led_naranja = Pin(32, Pin.OUT)
-led_amarillo = Pin(33, Pin.OUT)
+# LEDs status - GPIO32 se usa para bomba MAC-1, GPIO33 y GPIO25 disponibles
+led_naranja = Pin(33, Pin.OUT)
+led_amarillo = Pin(25, Pin.OUT)
 led_verde = Pin(25, Pin.OUT)
 
 # OLED
