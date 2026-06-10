@@ -4,6 +4,7 @@ import ssd1306
 import time
 import dht
 import json
+import network
 
 try:
     import urequests as requests
@@ -14,7 +15,41 @@ except ImportError:
 # CONFIGURACION DEL MODULO (Cambiar 1-5 segun invernadero)
 # ============================================================
 MODULE_ID = 1
+
+# WiFi - Wokwi usa "Wokwi-GUEST" sin password
+WIFI_SSID = "Wokwi-GUEST"
+WIFI_PASS = ""
+
+# Bridge en Render (Wokwi resuelve DNS externo via su proxy)
 BRIDGE_URL = "https://huerto-puente.onrender.com"
+
+# ============================================================
+# CONEXION WiFi
+# ============================================================
+
+def connect_wifi():
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if wlan.isconnected():
+        print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
+        return True
+    
+    print("[WiFi] Conectando a '{}'...".format(WIFI_SSID))
+    wlan.connect(WIFI_SSID, WIFI_PASS)
+    
+    timeout = 20
+    while not wlan.isconnected() and timeout > 0:
+        time.sleep(1)
+        timeout -= 1
+        print("[WiFi] Esperando... ({}s)".format(timeout))
+    
+    if wlan.isconnected():
+        config = wlan.ifconfig()
+        print("[WiFi] Conectado! IP: {}".format(config[0]))
+        return True
+    else:
+        print("[WiFi] ERROR: No se pudo conectar")
+        return False
 
 # ============================================================
 # PIN MAP - 4 Macetas via MUX CD74HC4067
@@ -29,7 +64,8 @@ MUX_SIG = ADC(Pin(34))
 MUX_SIG.atten(ADC.ATTN_11DB)
 
 # DHT22 - 1 por maceta
-DHT_PINS = [Pin(4), Pin(19), Pin(2), Pin(9)]
+# NOTA: GPIO9 es pin de boot, no funciona para DHT22. Usar GPIO20.
+DHT_PINS = [Pin(4), Pin(19), Pin(2), Pin(20)]
 dht_sensors = [dht.DHT22(p) for p in DHT_PINS]
 
 # Relays - 3 por maceta + buzzer
@@ -74,7 +110,9 @@ def leer_suelo(maceta):
     raw = leer_mux(SOIL_CH[maceta - 1])
     raw2 = leer_mux(SOIL_CH[maceta - 1])
     avg = (raw + raw2) // 2
-    pct = int((avg - 2165) / (3135 - 2165) * 100)
+    # Wokwi soil sensor: 0=seco, 4095=humedad max
+    # Mapear rango util (1000-3500) a 0-100%
+    pct = int((avg - 1000) / (3500 - 1000) * 100)
     return max(0, min(pct, 100))
 
 def leer_ph(maceta):
@@ -124,9 +162,9 @@ def enviar_lecturas(lecturas):
     }
     try:
         resp = requests.post(
-            f"{BRIDGE_URL}/api/lecturas",
+            "{}/api/lecturas".format(BRIDGE_URL),
             json=payload,
-            timeout=10
+            timeout=30
         )
         print("[ENV] Status: {}".format(resp.status_code))
         return resp.status_code in (200, 201)
@@ -137,8 +175,8 @@ def enviar_lecturas(lecturas):
 def recibir_comandos():
     try:
         resp = requests.get(
-            f"{BRIDGE_URL}/api/comandos/{MODULE_ID}",
-            timeout=10
+            "{}/api/comandos/{}".format(BRIDGE_URL, MODULE_ID),
+            timeout=15
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -161,8 +199,8 @@ def recibir_comandos():
                             break
 
                 requests.patch(
-                    f"{BRIDGE_URL}/api/comando/{cmd_id}/ejecutado",
-                    timeout=5
+                    "{}/api/comando/{}/ejecutado".format(BRIDGE_URL, cmd_id),
+                    timeout=10
                 )
                 print("[CMD] {} -> {}".format(nombre, estado))
             return comandos
@@ -242,9 +280,16 @@ def evaluar_alertas(datos):
 # MAIN
 # ============================================================
 
+# Conectar WiFi primero
+wifi_ok = connect_wifi()
+
 oled.fill(0)
-oled.text("INV-{} ONLINE".format(MODULE_ID), 0, 20)
-oled.text("Iniciando...", 0, 40)
+if wifi_ok:
+    oled.text("WiFi: OK", 0, 0)
+else:
+    oled.text("WiFi: FAIL", 0, 0)
+oled.text("INV-{} ONLINE".format(MODULE_ID), 0, 16)
+oled.text("Iniciando...", 0, 32)
 oled.show()
 time.sleep(2)
 
@@ -281,8 +326,29 @@ while True:
             print("  Temp:{}C  HumAmb:{}%".format(temp, hum_amb))
             print("  Suelo:{}%  pH:{}".format(hum_suelo, ph))
 
-        enviar_lecturas(lecturas_db)
-        recibir_comandos()
+        # Debug: mostrar valores raw del MUX
+        for ch_idx, ch in enumerate(SOIL_CH):
+            raw_val = leer_mux(ch)
+            print("[MUX] Suelo CH{}: raw={}".format(ch, raw_val))
+        for ch_idx, ch in enumerate(PH_CH):
+            raw_val = leer_mux(ch)
+            print("[MUX] pH CH{}: raw={}".format(ch, raw_val))
+
+        # Verificar WiFi antes de enviar
+        wlan = network.WLAN(network.STA_IF)
+        if not wlan.isconnected():
+            print("[WiFi] Desconectado, reconectando...")
+            wifi_ok = connect_wifi()
+        
+        if wifi_ok:
+            enviado = enviar_lecturas(lecturas_db)
+            if enviado:
+                print("[ENV] OK - 16 lecturas enviadas")
+            else:
+                print("[ENV] Fallo al enviar")
+            recibir_comandos()
+        else:
+            print("[SKIP] Sin WiFi, datos solo en OLED")
 
         oled_timer += 1
         if oled_timer >= 3:
@@ -292,7 +358,7 @@ while True:
             if oled_mac > 4:
                 oled_mac = 1
 
-        time.sleep(2)
+        time.sleep(3)
 
     except Exception as e:
         print("[ERROR] {}".format(e))
