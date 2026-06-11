@@ -11,6 +11,7 @@ let chart = null;
 let pollTimer = null;
 let realtimeSub = null;
 let vistaTabla = false;
+let historicoTimer = null;
 
 // ============================================================
 // INICIALIZACION
@@ -38,6 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await cargarDatos();
     initChart();
     iniciarRealtime();
+    iniciarAutoRefreshHistorico();
 
     pollTimer = setInterval(cargarDatos, CONFIG.POLL_INTERVAL);
     console.log('[APP] Iniciado');
@@ -498,6 +500,17 @@ async function cargarHistorico() {
             </tr>`;
         });
     }
+
+    const label = document.getElementById('autoRefreshLabel');
+    if (label) {
+        const now = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
+        label.textContent = 'Auto 10s | ' + now;
+    }
+}
+
+function iniciarAutoRefreshHistorico() {
+    if (historicoTimer) clearInterval(historicoTimer);
+    historicoTimer = setInterval(cargarHistorico, 10000);
 }
 
 function toggleVistaDatos() {
@@ -744,7 +757,9 @@ async function enviarAlerta(tipoAlerta, sensorTipo, valorForzado) {
     const maceta = currentMaceta;
     const dispositivoId = currentInv + 1;
     
-    console.log(`[SIM] Enviando alerta: ${tipoAlerta} -> ${sensorTipo} = ${valorForzado} (MAC-${maceta})`);
+    console.log(`[SIM] Enviando alerta: ${tipoAlerta} -> ${sensorTipo} = ${valorForzado} (MAC-${maceta}, DEV-${dispositivoId})`);
+    console.log(`[SIM] SupabaseClient defined:`, typeof SupabaseClient);
+    console.log(`[SIM] insert method:`, typeof SupabaseClient.insert);
     
     try {
         // Insertar en tabla simulacion_alertas via Supabase REST
@@ -791,9 +806,18 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
     
     infoSpan.textContent = `${labels[tipoAlerta]} -> ${valorForzado}`;
     statusDiv.style.display = 'flex';
-    statusDiv.classList.add('pulse-animation');
     
-    // Animar barra de progreso
+    const btnMap = {
+        'sequia': 'btn-sim-sequia',
+        'ph_bajo': 'btn-sim-phbajo',
+        'ph_alto': 'btn-sim-phalto',
+        'temp_alta': 'btn-sim-phalt',
+        'hum_baja': 'btn-sim-humbaja'
+    };
+    
+    const btn = document.getElementById(btnMap[tipoAlerta]);
+    if (btn) btn.classList.add('sim-active');
+    
     overrideStartTime = Date.now();
     if (overrideTimer) clearInterval(overrideTimer);
     
@@ -806,6 +830,7 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
             clearInterval(overrideTimer);
             ocultarOverrideStatus();
             resaltarSensor(sensorTipo, false);
+            if (btn) btn.classList.remove('sim-active');
         }
     }, 100);
 }

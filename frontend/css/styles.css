@@ -1379,6 +1379,24 @@ body {
     color: var(--accent-green);
 }
 
+.panel-header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.auto-refresh-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent-green);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.7;
+    border: 1px solid var(--accent-green);
+    padding: 2px 6px;
+}
+
 .data-table-container {
     max-height: 450px;
     overflow-y: auto;
@@ -3359,32 +3377,6 @@ body {
    MODO SIMULACION - LAZO CERRADO
    ============================================================ */
 
-.panel-simulacion {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 1.25rem;
-    position: relative;
-    overflow: hidden;
-}
-
-.panel-simulacion::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 10px,
-        rgba(255,255,255,0.02) 10px,
-        rgba(255,255,255,0.02) 20px
-    );
-    pointer-events: none;
-}
-
 .sim-description {
     display: flex;
     align-items: center;
@@ -3406,133 +3398,124 @@ body {
 
 .alert-buttons {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
     margin-bottom: 1rem;
 }
 
-.btn-alerta {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 0.875rem 0.5rem;
-    border: 2px solid;
-    border-radius: 4px;
-    cursor: pointer;
+.sim-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
+    justify-content: center;
+    gap: 6px;
+    padding: 16px 8px;
+    border: none;
+    border-top: 4px solid;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    cursor: pointer;
     transition: all 0.2s;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
     position: relative;
     overflow: hidden;
+    min-height: 80px;
 }
 
-.btn-alerta::before {
-    content: '';
+.sim-btn::before {
+    content: "";
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; width: 100%; height: 100%;
     background: repeating-linear-gradient(
         45deg,
-        transparent,
-        transparent 5px,
-        rgba(255,255,255,0.03) 5px,
-        rgba(255,255,255,0.03) 10px
+        transparent 0px, transparent 4px,
+        rgba(255,255,255,0.02) 4px, rgba(255,255,255,0.02) 6px
     );
     pointer-events: none;
 }
 
-.btn-alerta:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+.sim-btn .material-icons-round {
+    font-size: 22px;
+    position: relative;
+    z-index: 1;
 }
 
-.btn-alerta:active {
-    transform: translateY(0);
+.sim-btn .btn-label {
+    position: relative;
+    z-index: 1;
 }
 
-.btn-alerta .material-icons-round {
-    font-size: 1.5rem;
-    margin-bottom: 0.25rem;
+.sim-sequia {
+    background: #1a0000;
+    color: #ef4444;
+    border-top-color: #ef4444;
+    box-shadow: inset 0 4px 0 #991b1b;
 }
-
-.btn-alerta-label {
-    font-size: 0.8rem;
-    font-weight: 800;
-}
-
-.btn-alerta-desc {
-    font-size: 0.6rem;
-    opacity: 0.7;
-    font-weight: 400;
-}
-
-.btn-sequia {
-    background: #1a1a2e;
-    border-color: #e74c3c;
-    color: #e74c3c;
-}
-
-.btn-sequia:hover {
-    background: #e74c3c;
+.sim-sequia:hover {
+    background: #ef4444;
     color: #fff;
-    box-shadow: 0 0 20px rgba(231, 76, 60, 0.4);
+    box-shadow: inset 0 4px 0 #b91c1c;
 }
 
-.btn-ph-bajo {
-    background: #1a1a2e;
-    border-color: #f39c12;
-    color: #f39c12;
+.sim-ph-bajo {
+    background: #1a0f00;
+    color: #f59e0b;
+    border-top-color: #f59e0b;
+    box-shadow: inset 0 4px 0 #b45309;
+}
+.sim-ph-bajo:hover {
+    background: #f59e0b;
+    color: #000;
+    box-shadow: inset 0 4px 0 #d97706;
 }
 
-.btn-ph-bajo:hover {
-    background: #f39c12;
+.sim-ph-alto {
+    background: #1a001a;
+    color: #a855f7;
+    border-top-color: #a855f7;
+    box-shadow: inset 0 4px 0 #7c3aed;
+}
+.sim-ph-alto:hover {
+    background: #a855f7;
     color: #fff;
-    box-shadow: 0 0 20px rgba(243, 156, 18, 0.4);
+    box-shadow: inset 0 4px 0 #9333ea;
 }
 
-.btn-ph-alto {
-    background: #1a1a2e;
-    border-color: #9b59b6;
-    color: #9b59b6;
+.sim-temp-alta {
+    background: #1a0a00;
+    color: #f97316;
+    border-top-color: #f97316;
+    box-shadow: inset 0 4px 0 #c2410c;
+}
+.sim-temp-alta:hover {
+    background: #f97316;
+    color: #000;
+    box-shadow: inset 0 4px 0 #ea580c;
 }
 
-.btn-ph-alto:hover {
-    background: #9b59b6;
+.sim-hum-baja {
+    background: #000a1a;
+    color: #3b82f6;
+    border-top-color: #3b82f6;
+    box-shadow: inset 0 4px 0 #1d4ed8;
+}
+.sim-hum-baja:hover {
+    background: #3b82f6;
     color: #fff;
-    box-shadow: 0 0 20px rgba(155, 89, 182, 0.4);
+    box-shadow: inset 0 4px 0 #2563eb;
 }
 
-.btn-temp-alta {
-    background: #1a1a2e;
-    border-color: #e67e22;
-    color: #e67e22;
+.sim-btn.sim-active {
+    animation: sim-pulse 2s infinite;
 }
 
-.btn-temp-alta:hover {
-    background: #e67e22;
-    color: #fff;
-    box-shadow: 0 0 20px rgba(230, 126, 34, 0.4);
+@keyframes sim-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
 }
 
-.btn-hum-baja {
-    background: #1a1a2e;
-    border-color: #3498db;
-    color: #3498db;
-}
-
-.btn-hum-baja:hover {
-    background: #3498db;
-    color: #fff;
-    box-shadow: 0 0 20px rgba(52, 152, 219, 0.4);
-}
-
-/* Indicador de override activo */
 .override-status {
     padding: 0.875rem;
     background: linear-gradient(135deg, #e74c3c22, #f39c1222);
@@ -3573,7 +3556,6 @@ body {
     transition: width 0.1s linear;
 }
 
-/* Sensor card override highlight */
 .sensor-override {
     border-color: #e74c3c !important;
     box-shadow: 0 0 15px rgba(231, 76, 60, 0.3) !important;
@@ -3583,15 +3565,5 @@ body {
 @keyframes sensor-pulse {
     0%, 100% { box-shadow: 0 0 15px rgba(231, 76, 60, 0.3); }
     50% { box-shadow: 0 0 25px rgba(231, 76, 60, 0.5); }
-}
-
-/* Pulse animation for override status */
-.pulse-animation {
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
 }
 

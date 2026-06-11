@@ -415,7 +415,7 @@
         </div>
 
         <!-- MODO SIMULACION -->
-        <div class="panel panel-simulacion">
+        <div class="panel">
             <div class="panel-header">
                 <span class="material-icons-round">science</span>
                 <h3>Modo Simulacion - Lazo Cerrado</h3>
@@ -426,38 +426,27 @@
                 Envie alertas de simulacion al ESP32. El sistema activara automaticamente los actuadores y estabilizara el entorno.
             </div>
             <div class="alert-buttons">
-                <button class="btn-alerta btn-sequia" onclick="enviarAlerta('sequia', 'hum_suelo', 15.0)">
+                <button class="brutalist-btn sim-btn sim-sequia" id="btn-sim-sequia" onclick="enviarAlerta('sequia', 'hum_suelo', 15.0)">
                     <span class="material-icons-round">water_drop</span>
-                    <span class="btn-alerta-label">SEQUIA</span>
-                    <span class="btn-alerta-desc">HumSuelo -> 15%</span>
+                    <span class="btn-label">SEQUIA</span>
                 </button>
-                
-                <button class="btn-alerta btn-ph-bajo" onclick="enviarAlerta('ph_bajo', 'ph', 4.5)">
+                <button class="brutalist-btn sim-btn sim-ph-bajo" id="btn-sim-phbajo" onclick="enviarAlerta('ph_bajo', 'ph', 4.5)">
                     <span class="material-icons-round">science</span>
-                    <span class="btn-alerta-label">pH BAJO</span>
-                    <span class="btn-alerta-desc">pH -> 4.5</span>
+                    <span class="btn-label">pH BAJO</span>
                 </button>
-                
-                <button class="btn-alerta btn-ph-alto" onclick="enviarAlerta('ph_alto', 'ph', 9.0)">
+                <button class="brutalist-btn sim-btn sim-ph-alto" id="btn-sim-phalto" onclick="enviarAlerta('ph_alto', 'ph', 9.0)">
                     <span class="material-icons-round">science</span>
-                    <span class="btn-alerta-label">pH ALTO</span>
-                    <span class="btn-alerta-desc">pH -> 9.0</span>
+                    <span class="btn-label">pH ALTO</span>
                 </button>
-                
-                <button class="btn-alerta btn-temp-alta" onclick="enviarAlerta('temp_alta', 'temp', 45.0)">
+                <button class="brutalist-btn sim-btn sim-temp-alta" id="btn-sim-phalt" onclick="enviarAlerta('temp_alta', 'temp', 45.0)">
                     <span class="material-icons-round">thermostat</span>
-                    <span class="btn-alerta-label">TEMP ALTA</span>
-                    <span class="btn-alerta-desc">Temp -> 45 C</span>
+                    <span class="btn-label">TEMP ALTA</span>
                 </button>
-                
-                <button class="btn-alerta btn-hum-baja" onclick="enviarAlerta('hum_baja', 'hum_amb', 20.0)">
+                <button class="brutalist-btn sim-btn sim-hum-baja" id="btn-sim-humbaja" onclick="enviarAlerta('hum_baja', 'hum_amb', 20.0)">
                     <span class="material-icons-round">air</span>
-                    <span class="btn-alerta-label">HUM BAJA</span>
-                    <span class="btn-alerta-desc">HumAmb -> 20%</span>
+                    <span class="btn-label">HUM BAJA</span>
                 </button>
             </div>
-            
-            <!-- Indicador de override activo -->
             <div id="overrideStatus" class="override-status" style="display: none;">
                 <span class="material-icons-round">warning</span>
                 <span>OVERRIDE ACTIVO: </span>
@@ -473,10 +462,16 @@
             <div class="panel-header">
                 <span class="material-icons-round">timeline</span>
                 <h3>Historico - Ultimas 24 Horas</h3>
-                <button class="btn-toggle-data" id="btnToggleData" onclick="toggleVistaDatos()">
-                    <span class="material-icons-round">table_chart</span>
-                    <span>Tabla</span>
-                </button>
+                <div class="panel-header-actions">
+                    <span class="auto-refresh-label" id="autoRefreshLabel">Auto 10s</span>
+                    <button class="btn-toggle-data" id="btnRefreshHistorico" onclick="cargarHistorico()">
+                        <span class="material-icons-round">refresh</span>
+                    </button>
+                    <button class="btn-toggle-data" id="btnToggleData" onclick="toggleVistaDatos()">
+                        <span class="material-icons-round">table_chart</span>
+                        <span>Tabla</span>
+                    </button>
+                </div>
             </div>
             <div class="chart-container" id="chartContainer">
                 <canvas id="chartHistorico"></canvas>

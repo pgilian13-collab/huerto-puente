@@ -29,6 +29,7 @@ const SupabaseClient = {
 
     async insert(table, data) {
         const url = `${CONFIG.SUPABASE_URL}/rest/v1/${table}`;
+        console.log(`[INSERT] POST ${table}`, JSON.stringify(data));
         try {
             const resp = await fetch(url, {
                 method: 'POST',
@@ -40,9 +41,14 @@ const SupabaseClient = {
                 },
                 body: JSON.stringify(data),
             });
+            console.log(`[INSERT] Status: ${resp.status} OK: ${resp.ok}`);
+            if (!resp.ok) {
+                const errText = await resp.text();
+                console.error(`[INSERT] Error body:`, errText);
+            }
             return resp.ok;
         } catch (e) {
-            console.error(`Insert error [${table}]:`, e);
+            console.error(`[INSERT] Fetch error [${table}]:`, e.message, e);
             return false;
         }
     },
