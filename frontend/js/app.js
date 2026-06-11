@@ -725,3 +725,120 @@ function renderSensorStats(data, cfg) {
         <div class="sensor-stat-item"><div class="stat-dot danger"></div>Alertas: ${alertCount}</div>
     `;
 }
+
+// ============================================================
+// MODO SIMULACION - LAZO CERRADO
+// ============================================================
+
+let overrideTimer = null;
+let overrideStartTime = 0;
+const OVERRIDE_DURATION = 60000; // 60 segundos para estabilizar
+
+/**
+ * Enviar alerta de simulacion al ESP32 via Supabase
+ * @param {string} tipoAlerta - Tipo de alerta (sequia, ph_bajo, ph_alto, temp_alta, hum_baja)
+ * @param {string} sensorTipo - Tipo de sensor (hum_suelo, ph, temp, hum_amb)
+ * @param {number} valorForzado - Valor critico a forzar
+ */
+async function enviarAlerta(tipoAlerta, sensorTipo, valorForzado) {
+    const maceta = currentMaceta;
+    const dispositivoId = currentInv + 1;
+    
+    console.log(`[SIM] Enviando alerta: ${tipoAlerta} -> ${sensorTipo} = ${valorForzado} (MAC-${maceta})`);
+    
+    try {
+        // Insertar en tabla simulacion_alertas via Supabase REST
+        const result = await SupabaseClient.insert('simulacion_alertas', {
+            tipo_alerta: tipoAlerta,
+            sensor_tipo: sensorTipo,
+            valor_forzado: valorForzado,
+            maceta_numero: maceta,
+            dispositivo_id: dispositivoId,
+            activa: true
+        });
+        
+        if (result) {
+            // Mostrar indicador visual
+            mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado);
+            
+            // Cambiar color de la tarjeta del sensor afectado
+            resaltarSensor(sensorTipo, true);
+            
+            console.log(`[SIM] Alerta enviada exitosamente`);
+        } else {
+            console.error(`[SIM] Error al enviar alerta`);
+        }
+    } catch (error) {
+        console.error('[SIM] Error:', error);
+    }
+}
+
+/**
+ * Mostrar indicador de override activo con barra de progreso
+ */
+function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
+    const statusDiv = document.getElementById('overrideStatus');
+    const infoSpan = document.getElementById('overrideInfo');
+    const progressBar = document.getElementById('overrideProgressBar');
+    
+    const labels = {
+        'sequia': 'SEQUIA - Humedad Suelo',
+        'ph_bajo': 'pH BAJO',
+        'ph_alto': 'pH ALTO',
+        'temp_alta': 'TEMPERATURA ALTA',
+        'hum_baja': 'HUMEDAD AMBIENTE BAJA'
+    };
+    
+    infoSpan.textContent = `${labels[tipoAlerta]} -> ${valorForzado}`;
+    statusDiv.style.display = 'flex';
+    statusDiv.classList.add('pulse-animation');
+    
+    // Animar barra de progreso
+    overrideStartTime = Date.now();
+    if (overrideTimer) clearInterval(overrideTimer);
+    
+    overrideTimer = setInterval(() => {
+        const elapsed = Date.now() - overrideStartTime;
+        const progress = Math.min((elapsed / OVERRIDE_DURATION) * 100, 100);
+        progressBar.style.width = `${progress}%`;
+        
+        if (progress >= 100) {
+            clearInterval(overrideTimer);
+            ocultarOverrideStatus();
+            resaltarSensor(sensorTipo, false);
+        }
+    }, 100);
+}
+
+/**
+ * Ocultar indicador de override
+ */
+function ocultarOverrideStatus() {
+    const statusDiv = document.getElementById('overrideStatus');
+    const progressBar = document.getElementById('overrideProgressBar');
+    
+    statusDiv.style.display = 'none';
+    statusDiv.classList.remove('pulse-animation');
+    progressBar.style.width = '0%';
+    
+    if (overrideTimer) {
+        clearInterval(overrideTimer);
+        overrideTimer = null;
+    }
+}
+
+/**
+ * Resaltar tarjeta de sensor con color de override
+ */
+function resaltarSensor(sensorTipo, activar) {
+    const cards = document.querySelectorAll('.sensor-card');
+    cards.forEach(card => {
+        if (card.dataset.sensor === sensorTipo) {
+            if (activar) {
+                card.classList.add('sensor-override');
+            } else {
+                card.classList.remove('sensor-override');
+            }
+        }
+    });
+}

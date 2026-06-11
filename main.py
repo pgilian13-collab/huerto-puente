@@ -24,6 +24,218 @@ WIFI_PASS = ""
 BRIDGE_URL = "https://huerto-puente.onrender.com"
 
 # ============================================================
+# SENSOR OVERRIDE - Forzado de valores por software
+# ============================================================
+
+class SensorOverride:
+    """Maneja el forzado de valores de sensores por software.
+    
+    Cuando se recibe una alerta de simulacion desde el HTML:
+    1. Se fuerza el valor del sensor al valor critico
+    2. Se activa el algoritmo de estabilizacion
+    3. El valor se incrementa/decrementa gradualmente hacia el setpoint
+    4. Al alcanzar el setpoint, se apaga el actuador y se devuelve control al pin fisico
+    """
+    
+    def __init__(self):
+        # Overrides activos: {(maceta, sensor_tipo): {'valor': float, 'activa': bool, 'timestamp': int}}
+        self.overrides = {}
+        
+        # Estado de estabilizacion: {(maceta, sensor_tipo): {...}}
+        self.stabilization = {}
+        
+        # Setpoints ideales por tipo de sensor
+        self.setpoints = {
+            'hum_suelo': 60.0,   # 60% humedad ideal
+            'ph': 6.8,           # pH neutro
+            'temp': 25.0,        # 25 C ideal
+            'hum_amb': 65.0      # 65% humedad ambiente ideal
+        }
+        
+        # Rangos de operacion para el algoritmo de estabilizacion
+        self.rangos = {
+            'hum_suelo': {'min': 0, 'max': 100, 'umbral_critico': 30, 'umbral_recuperacion': 55},
+            'ph': {'min': 0, 'max': 14, 'umbral_critico_bajo': 4.5, 'umbral_critico_alto': 9.0, 'umbral_recuperacion_bajo': 5.5, 'umbral_recuperacion_alto': 7.5},
+            'temp': {'min': -10, 'max': 50, 'umbral_critico_alto': 35, 'umbral_critico_bajo': 10, 'umbral_recuperacion_alto': 30, 'umbral_recuperacion_bajo': 15},
+            'hum_amb': {'min': 0, 'max': 100, 'umbral_critico_bajo': 20, 'umbral_critico_alto': 85, 'umbral_recuperacion_bajo': 30, 'umbral_recuperacion_alto': 75}
+        }
+    
+    def set_override(self, maceta, sensor_tipo, valor_forzado):
+        """Forzar un valor de sensor desde el HTML."""
+        key = (maceta, sensor_tipo)
+        self.overrides[key] = {
+            'valor': valor_forzado,
+            'activa': True,
+            'timestamp': time.time()
+        }
+        
+        # Iniciar algoritmo de estabilizacion
+        setpoint = self.setpoints.get(sensor_tipo, 50.0)
+        self.stabilization[key] = {
+            'valor_inicial': valor_forzado,
+            'setpoint': setpoint,
+            'paso': 0,
+            'max_pasos': 20,  # 20 pasos x 3s = 60 segundos para estabilizar
+            'activo': True,
+            'ultima_actualizacion': time.time()
+        }
+        
+        print("[OVERRIDE] MAC-{} {} forzado a {}".format(maceta, sensor_tipo, valor_forzado))
+    
+    def get_valor(self, maceta, sensor_tipo, valor_fisico):
+        """Obtener valor del sensor (fisico o forzado)."""
+        key = (maceta, sensor_tipo)
+        
+        # Si hay override activo, usar valor forzado con estabilizacion
+        if key in self.overrides and self.overrides[key]['activa']:
+            return self._apply_stabilization(maceta, sensor_tipo, key)
+        
+        # Si no hay override, usar valor fisico
+        return valor_fisico
+    
+    def _apply_stabilization(self, maceta, sensor_tipo, key):
+        """Aplicar algoritmo de estabilizacion gradual."""
+        stab = self.stabilization.get(key)
+        if not stab or not stab['activo']:
+            self._clear_override(maceta, sensor_tipo)
+            return self.overrides.get(key, {}).get('valor', 0)
+        
+        now = time.time()
+        elapsed = now - stab['ultima_actualizacion']
+        
+        # Actualizar cada 3 segundos
+        if elapsed >= 3:
+            stab['paso'] += 1
+            stab['ultima_actualizacion'] = now
+            
+            # Interpolacion lineal hacia el setpoint
+            progreso = min(stab['paso'] / stab['max_pasos'], 1.0)
+            valor_nuevo = stab['valor_inicial'] + (stab['setpoint'] - stab['valor_inicial']) * progreso
+            valor_nuevo = round(valor_nuevo, 1)
+            
+            # Actualizar el override
+            self.overrides[key]['valor'] = valor_nuevo
+            
+            print("[STAB] MAC-{} {} paso {}/{}: {} -> {} (setpoint={})".format(
+                maceta, sensor_tipo, stab['paso'], stab['max_pasos'],
+                stab['valor_inicial'], valor_nuevo, stab['setpoint']))
+            
+            # Verificar si llegamos al setpoint
+            if stab['paso'] >= stab['max_pasos']:
+                print("[STAB] MAC-{} {} estabilizado en {}".format(maceta, sensor_tipo, stab['setpoint']))
+                stab['activo'] = False
+                self.overrides[key]['activa'] = False
+                
+                # Despues de 10 segundos, limpiar el override completamente
+                # para que el ESP32 vuelva a leer del pin fisico
+                print("[OVERRIDE] MAC-{} {} volviendo a pin fisico en 10s".format(maceta, sensor_tipo))
+            
+            return valor_nuevo
+        
+        # Retorna el valor actual sin cambios
+        return self.overrides[key]['valor']
+    
+    def _clear_override(self, maceta, sensor_tipo):
+        """Limpiar override completamente."""
+        key = (maceta, sensor_tipo)
+        if key in self.overrides:
+            del self.overrides[key]
+        if key in self.stabilization:
+            del self.stabilization[key]
+        print("[OVERRIDE] MAC-{} {} limpiado, controlando desde pin fisico".format(maceta, sensor_tipo))
+    
+    def tiene_override(self, maceta, sensor_tipo):
+        """Verificar si hay override activo."""
+        key = (maceta, sensor_tipo)
+        return key in self.overrides and self.overrides[key]['activa']
+    
+    def desactivar_todos(self):
+        """Desactivar todos los overrides (emergencia)."""
+        for key in list(self.overrides.keys()):
+            self.overrides[key]['activa'] = False
+        for key in list(self.stabilization.keys()):
+            self.stabilization[key]['activo'] = False
+        print("[OVERRIDE] Todos los overrides desactivados")
+
+# Instancia global de override
+sensor_override = SensorOverride()
+
+# ============================================================
+# LOGICA DE CONTROL EN LAZO CERRADO
+# ============================================================
+
+class LazoCerrado:
+    """Control automatico de actuadores basado en condiciones de sensores.
+    
+    Cuando un sensor esta en zona critica:
+    - Activa el actuador correspondiente automaticamente
+    - Cuando el sensor se recupera, apaga el actuador
+    """
+    
+    def __init__(self):
+        # Estado de actuadores: {maceta: {bomba: bool, ventilador: bool, pulverizador: bool}}
+        self.actuadores_estado = {1: {}, 2: {}, 3: {}, 4: {}}
+    
+    def evaluar(self, maceta, datos):
+        """Evaluar si se deben activar/desactivar actuadores."""
+        hum_suelo = datos.get('hum_suelo')
+        temp = datos.get('temp')
+        hum_amb = datos.get('hum_amb')
+        ph = datos.get('ph')
+        
+        acciones = []
+        
+        # === BOMBA DE RIEGO ===
+        # Se activa cuando humedad del suelo < 30% (critico)
+        # Se apaga cuando humedad del suelo > 55% (recuperacion)
+        if hum_suelo is not None:
+            if hum_suelo < 30:
+                if not self.actuadores_estado[maceta].get('bomba'):
+                    acciones.append(('bomba', 'ON'))
+                    self.actuadores_estado[maceta]['bomba'] = True
+                    print("[LAZO] MAC-{} Bomba ON (hum_suelo={})".format(maceta, hum_suelo))
+            elif hum_suelo > 55:
+                if self.actuadores_estado[maceta].get('bomba'):
+                    acciones.append(('bomba', 'OFF'))
+                    self.actuadores_estado[maceta]['bomba'] = False
+                    print("[LAZO] MAC-{} Bomba OFF (hum_suelo={})".format(maceta, hum_suelo))
+        
+        # === VENTILADOR ===
+        # Se activa cuando temp > 35 C (critico) o humedad ambiente > 85%
+        # Se apaga cuando temp < 30 C y humedad < 75%
+        if temp is not None:
+            if temp > 35 or (hum_amb is not None and hum_amb > 85):
+                if not self.actuadores_estado[maceta].get('ventilador'):
+                    acciones.append(('ventilador', 'ON'))
+                    self.actuadores_estado[maceta]['ventilador'] = True
+                    print("[LAZO] MAC-{} Ventilador ON (temp={}, hum_amb={})".format(maceta, temp, hum_amb))
+            elif temp < 30 and (hum_amb is None or hum_amb < 75):
+                if self.actuadores_estado[maceta].get('ventilador'):
+                    acciones.append(('ventilador', 'OFF'))
+                    self.actuadores_estado[maceta]['ventilador'] = False
+                    print("[LAZO] MAC-{} Ventilador OFF (temp={})".format(maceta, temp))
+        
+        # === PULVERIZADOR ===
+        # Se activa cuando humedad ambiente < 20% (critico) o temp > 35 C
+        # Se apaga cuando humedad ambiente > 50%
+        if hum_amb is not None:
+            if hum_amb < 20 or (temp is not None and temp > 35):
+                if not self.actuadores_estado[maceta].get('pulverizador'):
+                    acciones.append(('pulverizador', 'ON'))
+                    self.actuadores_estado[maceta]['pulverizador'] = True
+                    print("[LAZO] MAC-{} Pulverizador ON (hum_amb={}, temp={})".format(maceta, hum_amb, temp))
+            elif hum_amb > 50:
+                if self.actuadores_estado[maceta].get('pulverizador'):
+                    acciones.append(('pulverizador', 'OFF'))
+                    self.actuadores_estado[maceta]['pulverizador'] = False
+                    print("[LAZO] MAC-{} Pulverizador OFF (hum_amb={})".format(maceta, hum_amb))
+        
+        return acciones
+
+# Instancia global de lazo cerrado
+lazo_cerrado = LazoCerrado()
+
+# ============================================================
 # CONEXION WiFi
 # ============================================================
 
@@ -209,6 +421,64 @@ def recibir_comandos():
         print("[CMD] Error: {}".format(e))
     return []
 
+def recibir_alertas():
+    """Recibe alertas de simulacion activas desde Supabase via bridge."""
+    try:
+        resp = requests.get(
+            "{}/api/simulacion/overrides/{}".format(BRIDGE_URL, MODULE_ID),
+            timeout=15
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            alertas = data.get('overrides', [])
+            for alerta in alertas:
+                maceta = alerta.get('maceta_numero')
+                sensor_tipo = alerta.get('sensor_tipo')
+                valor_forzado = alerta.get('valor_forzado')
+                
+                if maceta and sensor_tipo and valor_forzado is not None:
+                    sensor_override.set_override(maceta, sensor_tipo, float(valor_forzado))
+            
+            return alertas
+    except Exception as e:
+        print("[ALERT] Error: {}".format(e))
+    return []
+
+def ejecutar_acciones_lazo(maceta, acciones):
+    """Ejecutar acciones del lazo cerrado en relays."""
+    for nombre, estado in acciones:
+        set_relay(maceta, nombre, estado)
+        print("[LAZO] MAC-{} {} -> {}".format(maceta, nombre, estado))
+        
+        # Marcar como ejecutado via bridge (opcional, para historial)
+        try:
+            dispositivo_id = MODULE_ID
+            if nombre == 'bomba':
+                actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 1
+                pin = RELAYS[maceta]['bomba'].pin
+            elif nombre == 'ventilador':
+                actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 2
+                pin = RELAYS[maceta]['ventilador'].pin
+            elif nombre == 'pulverizador':
+                actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 3
+                pin = RELAYS[maceta]['pulverizador'].pin
+            else:
+                continue
+            
+            requests.post(
+                "{}/api/lectura".format(BRIDGE_URL),
+                json={
+                    "sensor_id": 0,
+                    "valor_lectura": 1 if estado == 'ON' else 0,
+                    "dispositivo_id": MODULE_ID,
+                    "actuador_id": actuador_id,
+                    "estado": estado
+                },
+                timeout=10
+            )
+        except:
+            pass
+
 # ============================================================
 # OLED
 # ============================================================
@@ -297,22 +567,32 @@ time.sleep(2)
 oled_mac = 1
 oled_timer = 0
 last_lecturas = {}
+alertas_timer = 0
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
+print("=== MODO HIBRIDO ACTIVADO ===")
 
 while True:
     try:
         lecturas_db = []
 
         for m in range(1, 5):
-            temp, hum_amb = leer_dht(m)
-            hum_suelo = leer_suelo(m)
-            ph = leer_ph(m)
-
+            # === LEER SENSORES FISICOS ===
+            temp_fisico, hum_amb_fisico = leer_dht(m)
+            hum_suelo_fisico = leer_suelo(m)
+            ph_fisico = leer_ph(m)
+            
+            # === APLICAR OVERRIDES SI EXISTEN ===
+            temp = sensor_override.get_valor(m, 'temp', temp_fisico if temp_fisico is not None else 0)
+            hum_amb = sensor_override.get_valor(m, 'hum_amb', hum_amb_fisico if hum_amb_fisico is not None else 0)
+            hum_suelo = sensor_override.get_valor(m, 'hum_suelo', hum_suelo_fisico)
+            ph = sensor_override.get_valor(m, 'ph', ph_fisico)
+            
+            # === GUARDAR LECTURAS PARA ENVIO ===
             base_id = (MODULE_ID - 1) * 16 + (m - 1) * 4
 
-            lecturas_db.append({"sensor_id": base_id + 1, "valor": temp if temp is not None else 0})
-            lecturas_db.append({"sensor_id": base_id + 2, "valor": hum_amb if hum_amb is not None else 0})
+            lecturas_db.append({"sensor_id": base_id + 1, "valor": temp})
+            lecturas_db.append({"sensor_id": base_id + 2, "valor": hum_amb})
             lecturas_db.append({"sensor_id": base_id + 3, "valor": hum_suelo})
             lecturas_db.append({"sensor_id": base_id + 4, "valor": ph})
 
@@ -321,9 +601,24 @@ while True:
                 'hum_suelo': hum_suelo, 'ph': ph
             }
 
+            # === EVALUAR ALERTAS ===
             critico, alerta = evaluar_alertas(last_lecturas[m])
+            
+            # === LAZO CERRADO - EVALUAR ACTUADORES ===
+            acciones = lazo_cerrado.evaluar(m, last_lecturas[m])
+            if acciones:
+                ejecutar_acciones_lazo(m, acciones)
 
-            print("--- MAC-{} ---".format(m))
+            # === INDICAR SI HAY OVERRIDE ACTIVO ===
+            override_activo = (sensor_override.tiene_override(m, 'temp') or
+                             sensor_override.tiene_override(m, 'hum_amb') or
+                             sensor_override.tiene_override(m, 'hum_suelo') or
+                             sensor_override.tiene_override(m, 'ph'))
+            
+            if override_activo:
+                print("--- MAC-{} [OVERRIDE ACTIVO] ---".format(m))
+            else:
+                print("--- MAC-{} ---".format(m))
             print("  Temp:{}C  HumAmb:{}%".format(temp, hum_amb))
             print("  Suelo:{}%  pH:{}".format(hum_suelo, ph))
 
@@ -347,7 +642,15 @@ while True:
                 print("[ENV] OK - 16 lecturas enviadas")
             else:
                 print("[ENV] Fallo al enviar")
+            
+            # Recibir comandos de actuadores
             recibir_comandos()
+            
+            # Recibir alertas de simulacion cada 3 ciclos (9 segundos)
+            alertas_timer += 1
+            if alertas_timer >= 3:
+                alertas_timer = 0
+                recibir_alertas()
         else:
             print("[SKIP] Sin WiFi, datos solo en OLED")
 

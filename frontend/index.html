@@ -81,7 +81,7 @@
     <main class="main-content">
         <!-- SENSORES -->
         <div class="sensors-grid">
-            <div class="sensor-card">
+            <div class="sensor-card" data-sensor="temp">
                 <div class="card-top">
                     <div class="card-icon temp">
                         <span class="material-icons-round">thermostat</span>
@@ -91,11 +91,11 @@
                 <div class="card-label">Temperatura</div>
                 <div class="card-value">
                     <span class="value" id="temp">--</span>
-                    <span class="unit">°C</span>
+                    <span class="unit">C</span>
                 </div>
             </div>
 
-            <div class="sensor-card">
+            <div class="sensor-card" data-sensor="hum_amb">
                 <div class="card-top">
                     <div class="card-icon hum-amb">
                         <span class="material-icons-round">air</span>
@@ -109,7 +109,7 @@
                 </div>
             </div>
 
-            <div class="sensor-card">
+            <div class="sensor-card" data-sensor="hum_suelo">
                 <div class="card-top">
                     <div class="card-icon hum-suelo">
                         <span class="material-icons-round">water_drop</span>
@@ -123,7 +123,7 @@
                 </div>
             </div>
 
-            <div class="sensor-card">
+            <div class="sensor-card" data-sensor="ph">
                 <div class="card-top">
                     <div class="card-icon ph">
                         <span class="material-icons-round">science</span>
@@ -410,6 +410,60 @@
                         <span class="material-icons-round">power_settings_new</span>
                         <span class="btn-label">OFF</span>
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODO SIMULACION -->
+        <div class="panel panel-simulacion">
+            <div class="panel-header">
+                <span class="material-icons-round">science</span>
+                <h3>Modo Simulacion - Lazo Cerrado</h3>
+                <div class="panel-tag">SYS//SIM_CTRL</div>
+            </div>
+            <div class="sim-description">
+                <span class="material-icons-round">info</span>
+                Envie alertas de simulacion al ESP32. El sistema activara automaticamente los actuadores y estabilizara el entorno.
+            </div>
+            <div class="alert-buttons">
+                <button class="btn-alerta btn-sequia" onclick="enviarAlerta('sequia', 'hum_suelo', 15.0)">
+                    <span class="material-icons-round">water_drop</span>
+                    <span class="btn-alerta-label">SEQUIA</span>
+                    <span class="btn-alerta-desc">HumSuelo -> 15%</span>
+                </button>
+                
+                <button class="btn-alerta btn-ph-bajo" onclick="enviarAlerta('ph_bajo', 'ph', 4.5)">
+                    <span class="material-icons-round">science</span>
+                    <span class="btn-alerta-label">pH BAJO</span>
+                    <span class="btn-alerta-desc">pH -> 4.5</span>
+                </button>
+                
+                <button class="btn-alerta btn-ph-alto" onclick="enviarAlerta('ph_alto', 'ph', 9.0)">
+                    <span class="material-icons-round">science</span>
+                    <span class="btn-alerta-label">pH ALTO</span>
+                    <span class="btn-alerta-desc">pH -> 9.0</span>
+                </button>
+                
+                <button class="btn-alerta btn-temp-alta" onclick="enviarAlerta('temp_alta', 'temp', 45.0)">
+                    <span class="material-icons-round">thermostat</span>
+                    <span class="btn-alerta-label">TEMP ALTA</span>
+                    <span class="btn-alerta-desc">Temp -> 45 C</span>
+                </button>
+                
+                <button class="btn-alerta btn-hum-baja" onclick="enviarAlerta('hum_baja', 'hum_amb', 20.0)">
+                    <span class="material-icons-round">air</span>
+                    <span class="btn-alerta-label">HUM BAJA</span>
+                    <span class="btn-alerta-desc">HumAmb -> 20%</span>
+                </button>
+            </div>
+            
+            <!-- Indicador de override activo -->
+            <div id="overrideStatus" class="override-status" style="display: none;">
+                <span class="material-icons-round">warning</span>
+                <span>OVERRIDE ACTIVO: </span>
+                <span id="overrideInfo"></span>
+                <div class="override-progress">
+                    <div class="override-progress-bar" id="overrideProgressBar"></div>
                 </div>
             </div>
         </div>
