@@ -173,16 +173,16 @@ async function cargarDatos() {
         const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
 
         const lecturas = await SupabaseClient.query('monitoreo_lecturas',
-            `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=4`
+            `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=16`
         );
 
         if (lecturas && lecturas.length > 0) {
             const data = {};
             lecturas.forEach(l => {
-                if (l.sensor_id === ids.temp) data.temp = l.valor_lectura;
-                if (l.sensor_id === ids.hum_amb) data.humAmb = l.valor_lectura;
-                if (l.sensor_id === ids.hum_suelo) data.humSuelo = l.valor_lectura;
-                if (l.sensor_id === ids.ph) data.ph = l.valor_lectura;
+                if (l.sensor_id === ids.temp && data.temp === undefined) data.temp = l.valor_lectura;
+                if (l.sensor_id === ids.hum_amb && data.humAmb === undefined) data.humAmb = l.valor_lectura;
+                if (l.sensor_id === ids.hum_suelo && data.humSuelo === undefined) data.humSuelo = l.valor_lectura;
+                if (l.sensor_id === ids.ph && data.ph === undefined) data.ph = l.valor_lectura;
             });
             actualizarSensores(data);
         } else {
@@ -469,7 +469,16 @@ async function cargarHistorico() {
         const lecturas = await SupabaseClient.query('monitoreo_lecturas',
             `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=${CONFIG.CHART_POINTS}`
         );
-        if (!lecturas || lecturas.length === 0) return;
+        if (!lecturas || lecturas.length === 0) {
+            if (chart) {
+                chart.data.labels = [];
+                chart.data.datasets.forEach(d => { d.data = []; });
+                chart.update();
+            }
+            const tbody = document.getElementById('dataTableBody');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#64748b;">Sin datos</td></tr>';
+            return;
+        }
 
         const temporal = {};
         lecturas.forEach(l => {
@@ -599,13 +608,16 @@ function switchSensorView(view) {
 }
 
 function getSensorEstado(valor, tipo) {
-    const c = CONFIG;
+    const U = CONFIG.UMBRALES || {};
     if (tipo === 'temp') {
-        if (valor < c.TEMP_MIN || valor > c.TEMP_MAX) return valor < c.TEMP_MIN - 3 || valor > c.TEMP_MAX + 3 ? 'danger' : 'alert';
+        const mn = U.temp_min || 15, mx = U.temp_max || 30;
+        if (valor < mn || valor > mx) return valor < mn - 3 || valor > mx + 3 ? 'danger' : 'alert';
     } else if (tipo === 'hum_suelo') {
-        if (valor < c.HUM_SUELO_MIN || valor > c.HUM_SUELO_MAX) return valor < c.HUM_SUELO_MIN - 10 || valor > c.HUM_SUELO_MAX + 10 ? 'danger' : 'alert';
+        const mn = U.hum_suelo_min || 40, mx = U.hum_suelo_max || 80;
+        if (valor < mn || valor > mx) return valor < mn - 10 || valor > mx + 10 ? 'danger' : 'alert';
     } else if (tipo === 'ph') {
-        if (valor < c.PH_MIN || valor > c.PH_MAX) return valor < c.PH_MIN - 0.5 || valor > c.PH_MAX + 0.5 ? 'danger' : 'alert';
+        const mn = U.ph_min || 5.5, mx = U.ph_max || 7.5;
+        if (valor < mn || valor > mx) return valor < mn - 0.5 || valor > mx + 0.5 ? 'danger' : 'alert';
     } else if (tipo === 'hum_amb') {
         if (valor < 30 || valor > 85) return valor < 20 || valor > 90 ? 'danger' : 'alert';
     }
@@ -669,8 +681,9 @@ function renderSensorGrafico(data, cfg) {
         return e === 'ok' ? 'rgba(34,197,94,0.15)' : e === 'alert' ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.25)';
     });
 
-    const limitMin = cfg.key === 'temp' ? CONFIG.TEMP_MIN : cfg.key === 'hum_suelo' ? CONFIG.HUM_SUELO_MIN : cfg.key === 'ph' ? CONFIG.PH_MIN : 30;
-    const limitMax = cfg.key === 'temp' ? CONFIG.TEMP_MAX : cfg.key === 'hum_suelo' ? CONFIG.HUM_SUELO_MAX : cfg.key === 'ph' ? CONFIG.PH_MAX : 85;
+    const U = CONFIG.UMBRALES || {};
+    const limitMin = cfg.key === 'temp' ? U.temp_min : cfg.key === 'hum_suelo' ? U.hum_suelo_min : cfg.key === 'ph' ? U.ph_min : 30;
+    const limitMax = cfg.key === 'temp' ? U.temp_max : cfg.key === 'hum_suelo' ? U.hum_suelo_max : cfg.key === 'ph' ? U.ph_max : 85;
 
     sensorChart = new Chart(ctx, {
         type: 'line',

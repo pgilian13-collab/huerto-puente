@@ -87,11 +87,12 @@ class SensorOverride:
         """Obtener valor del sensor (fisico o forzado)."""
         key = (maceta, sensor_tipo)
         
-        # Si hay override activo, usar valor forzado con estabilizacion
         if key in self.overrides and self.overrides[key]['activa']:
             return self._apply_stabilization(maceta, sensor_tipo, key)
         
-        # Si no hay override, usar valor fisico
+        if key in self.overrides and not self.overrides[key]['activa']:
+            self._clear_override(maceta, sensor_tipo)
+        
         return valor_fisico
     
     def _apply_stabilization(self, maceta, sensor_tipo, key):
@@ -288,12 +289,12 @@ RELAYS = {
     3: {'bomba': Pin(12, Pin.OUT), 'ventilador': Pin(11, Pin.OUT), 'pulverizador': Pin(10, Pin.OUT)},
     4: {'bomba': Pin(8, Pin.OUT),  'ventilador': Pin(7, Pin.OUT),  'pulverizador': Pin(6, Pin.OUT)},
 }
-buzzer = PWM(Pin(26), Pin.OUT)
+buzzer = PWM(Pin(26))
 
 # LEDs status - GPIO32 se usa para bomba MAC-1, GPIO33 y GPIO25 disponibles
 led_naranja = Pin(33, Pin.OUT)
 led_amarillo = Pin(25, Pin.OUT)
-led_verde = Pin(25, Pin.OUT)
+led_verde = Pin(1, Pin.OUT)
 
 # OLED
 i2c = I2C(0, scl=Pin(22), sda=Pin(21))
@@ -451,13 +452,21 @@ def recibir_alertas():
         if resp.status_code == 200:
             data = resp.json()
             alertas = data.get('overrides', [])
+            
+            active_keys = set()
             for alerta in alertas:
                 maceta = alerta.get('maceta_numero')
                 sensor_tipo = alerta.get('sensor_tipo')
                 valor_forzado = alerta.get('valor_forzado')
                 
                 if maceta and sensor_tipo and valor_forzado is not None:
-                    sensor_override.set_override(maceta, sensor_tipo, float(valor_forzado))
+                    active_keys.add((maceta, sensor_tipo))
+                    if not sensor_override.tiene_override(maceta, sensor_tipo):
+                        sensor_override.set_override(maceta, sensor_tipo, float(valor_forzado))
+            
+            for key in list(sensor_override.overrides.keys()):
+                if key not in active_keys:
+                    sensor_override._clear_override(key[0], key[1])
             
             return alertas
     except Exception as e:
@@ -473,33 +482,6 @@ def ejecutar_acciones_lazo(maceta, acciones):
     for nombre, estado in acciones:
         set_relay(maceta, nombre, estado)
         print("[LAZO] MAC-{} {} -> {}".format(maceta, nombre, estado))
-        
-        gc.collect()
-        try:
-            dispositivo_id = MODULE_ID
-            if nombre == 'bomba':
-                actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 1
-            elif nombre == 'ventilador':
-                actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 2
-            elif nombre == 'pulverizador':
-                actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 3
-            else:
-                continue
-            
-            r = requests.post(
-                "{}/api/lectura".format(BRIDGE_URL),
-                json={
-                    "sensor_id": 0,
-                    "valor_lectura": 1 if estado == 'ON' else 0,
-                    "dispositivo_id": MODULE_ID,
-                    "actuador_id": actuador_id,
-                    "estado": estado
-                },
-                timeout=10
-            )
-            r.close()
-        except:
-            pass
         gc.collect()
 
 # ============================================================
@@ -607,8 +589,8 @@ while True:
             ph_fisico = leer_ph(m)
             
             # === APLICAR OVERRIDES SI EXISTEN ===
-            temp = sensor_override.get_valor(m, 'temp', temp_fisico if temp_fisico is not None else 0)
-            hum_amb = sensor_override.get_valor(m, 'hum_amb', hum_amb_fisico if hum_amb_fisico is not None else 0)
+            temp = sensor_override.get_valor(m, 'temp', temp_fisico)
+            hum_amb = sensor_override.get_valor(m, 'hum_amb', hum_amb_fisico)
             hum_suelo = sensor_override.get_valor(m, 'hum_suelo', hum_suelo_fisico)
             ph = sensor_override.get_valor(m, 'ph', ph_fisico)
             

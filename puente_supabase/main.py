@@ -83,34 +83,9 @@ client = httpx.AsyncClient(timeout=30.0)
 # ============================================================
 
 @app.post("/api/lectura")
-async def recibir_lectura(data: dict):
-    """Recibe lectura del ESP32 y la guarda en Supabase"""
-    sensor_id = data.get("sensor_id")
-    valor = data.get("valor_lectura")
-    dispositivo_id = data.get("dispositivo_id", 1)
-
-    if sensor_id is None or valor is None:
-        raise HTTPException(400, "Falta sensor_id o valor_lectura")
-
-    # Insertar en Supabase
-    payload = {
-        "sensor_id": sensor_id,
-        "valor_lectura": round(float(valor), 2),
-    }
-
-    try:
-        resp = await client.post(
-            f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas",
-            json=payload,
-            headers=HEADERS_SERVICE,
-        )
-        print(f"[BRIDGE] INSERT status={resp.status_code} body={resp.text[:300]}")
-        if resp.status_code in (200, 201):
-            return {"status": "ok", "message": "Lectura guardada"}
-        else:
-            raise HTTPException(502, f"Supabase {resp.status_code}: {resp.text[:300]}")
-    except httpx.RequestError as e:
-        raise HTTPException(503, f"Error de red: {str(e)}")
+async def recibir_lectura_removed(data: dict):
+    """REMOVED: This endpoint was creating garbage data with sensor_id=0."""
+    raise HTTPException(410, "Endpoint removed. Use /api/lecturas for batch sensor data.")
 
 
 @app.post("/api/lecturas")
@@ -388,33 +363,6 @@ async def websocket_realtime(websocket: WebSocket):
 # ============================================================
 # ADMIN - TEMPORARY SQL EXECUTION
 # ============================================================
-
-@app.post("/admin/exec-sql")
-async def admin_exec_sql(data: dict):
-    """Execute raw SQL via direct PostgreSQL or Supabase REST"""
-    sql = data.get("sql", "")
-    if not sql:
-        raise HTTPException(400, "No SQL provided")
-
-    db_url = os.getenv("DATABASE_URL")
-    if db_url:
-        import psycopg2
-        try:
-            conn = psycopg2.connect(db_url)
-            conn.autocommit = True
-            cur = conn.cursor()
-            cur.execute(sql)
-            try:
-                result = cur.fetchall()
-            except Exception:
-                result = "SQL executed (no return data)"
-            cur.close()
-            conn.close()
-            return {"status": "ok", "method": "psycopg2", "result": str(result)[:5000]}
-        except Exception as e:
-            return {"status": "error", "detail": str(e)[:3000]}
-    else:
-        raise HTTPException(500, "DATABASE_URL not set. Set it in Render env vars.")
 
 
 # ============================================================
