@@ -168,31 +168,35 @@ function selectInvernadero(index) {
 // ============================================================
 
 async function cargarDatos() {
-    const dispositivoId = currentInv + 1;
-    const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
+    try {
+        const dispositivoId = currentInv + 1;
+        const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
 
-    const lecturas = await SupabaseClient.query('monitoreo_lecturas',
-        `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=4`
-    );
+        const lecturas = await SupabaseClient.query('monitoreo_lecturas',
+            `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=4`
+        );
 
-    if (lecturas && lecturas.length > 0) {
-        const data = {};
-        lecturas.forEach(l => {
-            if (l.sensor_id === ids.temp) data.temp = l.valor_lectura;
-            if (l.sensor_id === ids.hum_amb) data.humAmb = l.valor_lectura;
-            if (l.sensor_id === ids.hum_suelo) data.humSuelo = l.valor_lectura;
-            if (l.sensor_id === ids.ph) data.ph = l.valor_lectura;
-        });
-        actualizarSensores(data);
-    } else {
-        resetSensores();
-    }
+        if (lecturas && lecturas.length > 0) {
+            const data = {};
+            lecturas.forEach(l => {
+                if (l.sensor_id === ids.temp) data.temp = l.valor_lectura;
+                if (l.sensor_id === ids.hum_amb) data.humAmb = l.valor_lectura;
+                if (l.sensor_id === ids.hum_suelo) data.humSuelo = l.valor_lectura;
+                if (l.sensor_id === ids.ph) data.ph = l.valor_lectura;
+            });
+            actualizarSensores(data);
+        } else {
+            resetSensores();
+        }
 
-    const actuadores = await SupabaseClient.getActuadores(currentInv);
-    if (actuadores) {
-        actualizarActuadores(actuadores);
-    } else {
-        resetActuadores();
+        const actuadores = await SupabaseClient.getActuadores(currentInv);
+        if (actuadores) {
+            actualizarActuadores(actuadores);
+        } else {
+            resetActuadores();
+        }
+    } catch (e) {
+        console.error('[DATOS] Error:', e);
     }
 }
 
@@ -458,53 +462,59 @@ function initChart() {
 }
 
 async function cargarHistorico() {
-    const dispositivoId = currentInv + 1;
-    const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
+    try {
+        const dispositivoId = currentInv + 1;
+        const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
 
-    const lecturas = await SupabaseClient.query('monitoreo_lecturas',
-        `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=${CONFIG.CHART_POINTS}`
-    );
-    if (!lecturas || lecturas.length === 0) return;
+        const lecturas = await SupabaseClient.query('monitoreo_lecturas',
+            `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=${CONFIG.CHART_POINTS}`
+        );
+        if (!lecturas || lecturas.length === 0) return;
 
-    const temporal = {};
-    lecturas.forEach(l => {
-        const fecha = new Date(l.fecha_hora);
-        const ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
-        const tsFull = fecha.toLocaleString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
-        if (!temporal[ts]) temporal[ts] = { full: tsFull };
-        if (l.sensor_id === ids.temp) temporal[ts].temp = l.valor_lectura;
-        if (l.sensor_id === ids.hum_amb) temporal[ts].humAmb = l.valor_lectura;
-        if (l.sensor_id === ids.hum_suelo) temporal[ts].humSuelo = l.valor_lectura;
-        if (l.sensor_id === ids.ph) temporal[ts].ph = l.valor_lectura;
-    });
-
-    const labels = Object.keys(temporal).reverse();
-    chart.data.labels = labels;
-    chart.data.datasets[0].data = labels.map(k => temporal[k].temp || null);
-    chart.data.datasets[1].data = labels.map(k => temporal[k].humSuelo || null);
-    chart.data.datasets[2].data = labels.map(k => temporal[k].humAmb || null);
-    chart.data.datasets[3].data = labels.map(k => temporal[k].ph || null);
-    chart.update();
-
-    const tbody = document.getElementById('dataTableBody');
-    if (tbody) {
-        tbody.innerHTML = '';
-        labels.forEach(k => {
-            const d = temporal[k];
-            tbody.innerHTML += `<tr>
-                <td>${d.full || k}</td>
-                <td>${d.temp !== undefined ? d.temp.toFixed(1) : '-'}</td>
-                <td>${d.humAmb !== undefined ? d.humAmb.toFixed(1) : '-'}</td>
-                <td>${d.humSuelo !== undefined ? d.humSuelo.toFixed(0) : '-'}</td>
-                <td>${d.ph !== undefined ? d.ph.toFixed(2) : '-'}</td>
-            </tr>`;
+        const temporal = {};
+        lecturas.forEach(l => {
+            const fecha = new Date(l.fecha_hora);
+            const ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
+            const tsFull = fecha.toLocaleString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
+            if (!temporal[ts]) temporal[ts] = { full: tsFull };
+            if (l.sensor_id === ids.temp) temporal[ts].temp = l.valor_lectura;
+            if (l.sensor_id === ids.hum_amb) temporal[ts].humAmb = l.valor_lectura;
+            if (l.sensor_id === ids.hum_suelo) temporal[ts].humSuelo = l.valor_lectura;
+            if (l.sensor_id === ids.ph) temporal[ts].ph = l.valor_lectura;
         });
-    }
 
-    const label = document.getElementById('autoRefreshLabel');
-    if (label) {
-        const now = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
-        label.textContent = 'Auto 10s | ' + now;
+        const labels = Object.keys(temporal).reverse();
+        if (chart) {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = labels.map(k => temporal[k].temp || null);
+            chart.data.datasets[1].data = labels.map(k => temporal[k].humSuelo || null);
+            chart.data.datasets[2].data = labels.map(k => temporal[k].humAmb || null);
+            chart.data.datasets[3].data = labels.map(k => temporal[k].ph || null);
+            chart.update();
+        }
+
+        const tbody = document.getElementById('dataTableBody');
+        if (tbody) {
+            tbody.innerHTML = '';
+            labels.forEach(k => {
+                const d = temporal[k];
+                tbody.innerHTML += `<tr>
+                    <td>${d.full || k}</td>
+                    <td>${d.temp !== undefined ? d.temp.toFixed(1) : '-'}</td>
+                    <td>${d.humAmb !== undefined ? d.humAmb.toFixed(1) : '-'}</td>
+                    <td>${d.humSuelo !== undefined ? d.humSuelo.toFixed(0) : '-'}</td>
+                    <td>${d.ph !== undefined ? d.ph.toFixed(2) : '-'}</td>
+                </tr>`;
+            });
+        }
+
+        const label = document.getElementById('autoRefreshLabel');
+        if (label) {
+            const now = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
+            label.textContent = 'Auto 10s | ' + now;
+        }
+    } catch (e) {
+        console.error('[HIST] Error:', e);
     }
 }
 
