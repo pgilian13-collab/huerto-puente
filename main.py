@@ -5,6 +5,7 @@ import time
 import dht
 import json
 import network
+import gc
 
 try:
     import urequests as requests
@@ -246,14 +247,13 @@ def connect_wifi():
         print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
         return True
     
-    print("[WiFi] Conectando a '{}'...".format(WIFI_SSID))
+    print("[WiFi] '{}'...".format(WIFI_SSID))
     wlan.connect(WIFI_SSID, WIFI_PASS)
     
     timeout = 20
     while not wlan.isconnected() and timeout > 0:
         time.sleep(1)
         timeout -= 1
-        print("[WiFi] Esperando... ({}s)".format(timeout))
     
     if wlan.isconnected():
         config = wlan.ifconfig()
@@ -369,27 +369,36 @@ def set_buzzer(freq, duty):
 # ============================================================
 
 def enviar_lecturas(lecturas):
+    gc.collect()
     payload = {
         "dispositivo_id": MODULE_ID,
         "lecturas": lecturas
     }
+    resp = None
     try:
         resp = requests.post(
             "{}/api/lecturas".format(BRIDGE_URL),
             json=payload,
-            timeout=30
+            timeout=15
         )
-        print("[ENV] Status: {}".format(resp.status_code))
-        return resp.status_code in (200, 201)
+        code = resp.status_code
+        print("[ENV] Status: {}".format(code))
+        return code in (200, 201)
     except Exception as e:
         print("[ENV] Error: {}".format(e))
         return False
+    finally:
+        if resp:
+            resp.close()
+        gc.collect()
 
 def recibir_comandos():
+    gc.collect()
+    resp = None
     try:
         resp = requests.get(
             "{}/api/comandos/{}".format(BRIDGE_URL, MODULE_ID),
-            timeout=15
+            timeout=10
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -411,22 +420,33 @@ def recibir_comandos():
                             set_relay(m, nombre, estado)
                             break
 
-                requests.patch(
-                    "{}/api/comando/{}/ejecutado".format(BRIDGE_URL, cmd_id),
-                    timeout=10
-                )
+                gc.collect()
+                try:
+                    r2 = requests.patch(
+                        "{}/api/comando/{}/ejecutado".format(BRIDGE_URL, cmd_id),
+                        timeout=10
+                    )
+                    r2.close()
+                except:
+                    pass
                 print("[CMD] {} -> {}".format(nombre, estado))
             return comandos
     except Exception as e:
         print("[CMD] Error: {}".format(e))
+    finally:
+        if resp:
+            resp.close()
+        gc.collect()
     return []
 
 def recibir_alertas():
     """Recibe alertas de simulacion activas desde Supabase via bridge."""
+    gc.collect()
+    resp = None
     try:
         resp = requests.get(
             "{}/api/simulacion/overrides/{}".format(BRIDGE_URL, MODULE_ID),
-            timeout=15
+            timeout=10
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -442,6 +462,10 @@ def recibir_alertas():
             return alertas
     except Exception as e:
         print("[ALERT] Error: {}".format(e))
+    finally:
+        if resp:
+            resp.close()
+        gc.collect()
     return []
 
 def ejecutar_acciones_lazo(maceta, acciones):
@@ -450,22 +474,19 @@ def ejecutar_acciones_lazo(maceta, acciones):
         set_relay(maceta, nombre, estado)
         print("[LAZO] MAC-{} {} -> {}".format(maceta, nombre, estado))
         
-        # Marcar como ejecutado via bridge (opcional, para historial)
+        gc.collect()
         try:
             dispositivo_id = MODULE_ID
             if nombre == 'bomba':
                 actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 1
-                pin = RELAYS[maceta]['bomba'].pin
             elif nombre == 'ventilador':
                 actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 2
-                pin = RELAYS[maceta]['ventilador'].pin
             elif nombre == 'pulverizador':
                 actuador_id = (dispositivo_id - 1) * 13 + (maceta - 1) * 3 + 3
-                pin = RELAYS[maceta]['pulverizador'].pin
             else:
                 continue
             
-            requests.post(
+            r = requests.post(
                 "{}/api/lectura".format(BRIDGE_URL),
                 json={
                     "sensor_id": 0,
@@ -476,8 +497,10 @@ def ejecutar_acciones_lazo(maceta, acciones):
                 },
                 timeout=10
             )
+            r.close()
         except:
             pass
+        gc.collect()
 
 # ============================================================
 # OLED
@@ -574,6 +597,7 @@ print("=== MODO HIBRIDO ACTIVADO ===")
 
 while True:
     try:
+        gc.collect()
         lecturas_db = []
 
         for m in range(1, 5):
@@ -616,19 +640,9 @@ while True:
                              sensor_override.tiene_override(m, 'ph'))
             
             if override_activo:
-                print("--- MAC-{} [OVERRIDE ACTIVO] ---".format(m))
+                print("MAC-{} [OVR] T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
             else:
-                print("--- MAC-{} ---".format(m))
-            print("  Temp:{}C  HumAmb:{}%".format(temp, hum_amb))
-            print("  Suelo:{}%  pH:{}".format(hum_suelo, ph))
-
-        # Debug: mostrar valores raw del MUX
-        for ch_idx, ch in enumerate(SOIL_CH):
-            raw_val = leer_mux(ch)
-            print("[MUX] Suelo CH{}: raw={}".format(ch, raw_val))
-        for ch_idx, ch in enumerate(PH_CH):
-            raw_val = leer_mux(ch)
-            print("[MUX] pH CH{}: raw={}".format(ch, raw_val))
+                print("MAC-{} T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
 
         # Verificar WiFi antes de enviar
         wlan = network.WLAN(network.STA_IF)
@@ -636,17 +650,13 @@ while True:
             print("[WiFi] Desconectado, reconectando...")
             wifi_ok = connect_wifi()
         
+        gc.collect()
         if wifi_ok:
             enviado = enviar_lecturas(lecturas_db)
-            if enviado:
-                print("[ENV] OK - 16 lecturas enviadas")
-            else:
-                print("[ENV] Fallo al enviar")
+            print("[ENV] {}".format("OK" if enviado else "FAIL"))
             
-            # Recibir comandos de actuadores
             recibir_comandos()
             
-            # Recibir alertas de simulacion cada 3 ciclos (9 segundos)
             alertas_timer += 1
             if alertas_timer >= 3:
                 alertas_timer = 0
