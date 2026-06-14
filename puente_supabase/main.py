@@ -421,6 +421,11 @@ async def root():
     return FileResponse("static/index.html")
 
 
+@app.get("/ping")
+async def ping():
+    return {"status": "ok"}
+
+
 @app.get("/health")
 async def health():
     env_ok = {
