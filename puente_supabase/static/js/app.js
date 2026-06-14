@@ -769,7 +769,10 @@ function renderSensorStats(data, cfg) {
 let overrideTimer = null;
 let overrideStartTime = 0;
 let currentAlertaId = null;
-const OVERRIDE_DURATION = 60000;
+const OVERRIDE_DURATION = 83000;
+const PHASE_DEGRADE_MS = 21000;
+const PHASE_HOLD_MS = 2000;
+const PHASE_RECOVER_MS = 60000;
 
 const SIM_INPUT_MAP = {
     'sequia': 'val-sequia',
@@ -818,6 +821,7 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
     const statusDiv = document.getElementById('overrideStatus');
     const infoSpan = document.getElementById('overrideInfo');
     const progressBar = document.getElementById('overrideProgressBar');
+    const phaseLabel = document.getElementById('overridePhaseLabel');
     
     const labels = {
         'sequia': 'SEQUIA - Humedad Suelo',
@@ -849,6 +853,20 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
         const elapsed = Date.now() - overrideStartTime;
         const progress = Math.min((elapsed / OVERRIDE_DURATION) * 100, 100);
         progressBar.style.width = `${progress}%`;
+        
+        if (elapsed < PHASE_DEGRADE_MS) {
+            phaseLabel.textContent = 'DEGRADANDO';
+            phaseLabel.className = 'override-phase-label phase-degrade';
+            progressBar.className = 'override-progress-bar bar-degrade';
+        } else if (elapsed < PHASE_DEGRADE_MS + PHASE_HOLD_MS) {
+            phaseLabel.textContent = 'CRITICO';
+            phaseLabel.className = 'override-phase-label phase-hold';
+            progressBar.className = 'override-progress-bar bar-hold';
+        } else {
+            phaseLabel.textContent = 'RECUPERANDO';
+            phaseLabel.className = 'override-phase-label phase-recover';
+            progressBar.className = 'override-progress-bar bar-recover';
+        }
         
         if (progress >= 100) {
             clearInterval(overrideTimer);

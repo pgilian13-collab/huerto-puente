@@ -75,7 +75,7 @@ const CONFIG = {
     },
 
     PIN_MAP: {
-        1: { bomba: 13, ventilador: 14, pulverizador: 5 },
+        1: { bomba: 32, ventilador: 14, pulverizador: 5 },
         2: { bomba: 23, ventilador: 0,  pulverizador: 15 },
         3: { bomba: 12, ventilador: 11, pulverizador: 10 },
         4: { bomba: 8,  ventilador: 7,  pulverizador: 6 },

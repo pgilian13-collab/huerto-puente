@@ -32,57 +32,67 @@ BRIDGE_KEY = "huerto-ccss-2026"
 class SensorOverride:
     """Maneja el forzado de valores de sensores por software.
     
-    Cuando se recibe una alerta de simulacion desde el HTML:
-    1. Se fuerza el valor del sensor al valor critico
-    2. Se activa el algoritmo de estabilizacion
-    3. El valor se incrementa/decrementa gradualmente hacia el setpoint
-    4. Al alcanzar el setpoint, se apaga el actuador y se devuelve control al pin fisico
+    Ciclo de 3 fases:
+    1. DEGRADING (21s): valor fisico actual -> valor critico (7 pasos x 3s)
+    2. HOLDING (2s): se mantiene en valor critico
+    3. RECOVERING (60s): valor critico -> setpoint ideal (20 pasos x 3s)
     """
     
+    PHASE_DEGRADING = 0
+    PHASE_HOLDING = 1
+    PHASE_RECOVERING = 2
+    
     def __init__(self):
-        # Overrides activos: {(maceta, sensor_tipo): {'valor': float, 'activa': bool, 'timestamp': int}}
         self.overrides = {}
-        
-        # Estado de estabilizacion: {(maceta, sensor_tipo): {...}}
         self.stabilization = {}
         
-        # Setpoints ideales por tipo de sensor
         self.setpoints = {
-            'hum_suelo': 60.0,   # 60% humedad ideal
-            'ph': 6.8,           # pH neutro
-            'temp': 25.0,        # 25 C ideal
-            'hum_amb': 65.0      # 65% humedad ambiente ideal
+            'hum_suelo': 60.0,
+            'ph': 6.8,
+            'temp': 25.0,
+            'hum_amb': 65.0
         }
         
-        # Rangos de operacion para el algoritmo de estabilizacion
         self.rangos = {
             'hum_suelo': {'min': 0, 'max': 100, 'umbral_critico': 30, 'umbral_recuperacion': 55},
-            'ph': {'min': 0, 'max': 14, 'umbral_critico_bajo': 4.5, 'umbral_critico_alto': 9.0, 'umbral_recuperacion_bajo': 5.5, 'umbral_recuperacion_alto': 7.5},
-            'temp': {'min': -10, 'max': 50, 'umbral_critico_alto': 35, 'umbral_critico_bajo': 10, 'umbral_recuperacion_alto': 30, 'umbral_recuperacion_bajo': 15},
-            'hum_amb': {'min': 0, 'max': 100, 'umbral_critico_bajo': 20, 'umbral_critico_alto': 85, 'umbral_recuperacion_bajo': 30, 'umbral_recuperacion_alto': 75}
+            'ph': {'min': 0, 'max': 14, 'umbral_critico_bajo': 4.5, 'umbral_critico_alto': 9.0,
+                   'umbral_recuperacion_bajo': 5.5, 'umbral_recuperacion_alto': 7.5},
+            'temp': {'min': -10, 'max': 50, 'umbral_critico_alto': 35, 'umbral_critico_bajo': 10,
+                     'umbral_recuperacion_alto': 30, 'umbral_recuperacion_bajo': 15},
+            'hum_amb': {'min': 0, 'max': 100, 'umbral_critico_bajo': 20, 'umbral_critico_alto': 85,
+                        'umbral_recuperacion_bajo': 30, 'umbral_recuperacion_alto': 75}
         }
     
-    def set_override(self, maceta, sensor_tipo, valor_forzado):
-        """Forzar un valor de sensor desde el HTML."""
+    def set_override(self, maceta, sensor_tipo, valor_forzado, valor_fisico_actual):
+        """Forzar un valor de sensor con ciclo de 3 fases.
+        
+        Args:
+            valor_fisico_actual: Valor actual leido del pin fisico del sensor.
+        """
         key = (maceta, sensor_tipo)
         self.overrides[key] = {
-            'valor': valor_forzado,
+            'valor': valor_fisico_actual,
             'activa': True,
             'timestamp': time.time()
         }
         
-        # Iniciar algoritmo de estabilizacion
         setpoint = self.setpoints.get(sensor_tipo, 50.0)
         self.stabilization[key] = {
-            'valor_inicial': valor_forzado,
+            'valor_fisico_inicio': valor_fisico_actual,
+            'valor_critico': valor_forzado,
             'setpoint': setpoint,
+            'fase': self.PHASE_DEGRADING,
             'paso': 0,
-            'max_pasos': 20,  # 20 pasos x 3s = 60 segundos para estabilizar
+            'max_pasos_deg': 7,
+            'max_pasos_rec': 20,
+            'hold_inicio': 0,
+            'hold_duracion': 2,
             'activo': True,
             'ultima_actualizacion': time.time()
         }
         
-        print("[OVERRIDE] MAC-{} {} forzado a {}".format(maceta, sensor_tipo, valor_forzado))
+        print("[OVERRIDE] MAC-{} {} DEGRAD {} -> {}".format(
+            maceta, sensor_tipo, valor_fisico_actual, valor_forzado))
     
     def get_valor(self, maceta, sensor_tipo, valor_fisico):
         """Obtener valor del sensor (fisico o forzado)."""
@@ -90,80 +100,104 @@ class SensorOverride:
         
         if key in self.overrides and self.overrides[key]['activa']:
             age = time.time() - self.overrides[key]['timestamp']
-            if age > 90:
-                print("[OVERRIDE] MAC-{} {} TTL expirado ({:.0f}s), limpiando".format(maceta, sensor_tipo, age))
+            if age > 120:
+                print("[OVERRIDE] MAC-{} {} TTL expirado".format(maceta, sensor_tipo))
                 self._clear_override(maceta, sensor_tipo)
                 return valor_fisico
-            return self._apply_stabilization(maceta, sensor_tipo, key)
+            return self._apply_stabilization(maceta, sensor_tipo, key, valor_fisico)
         
         if key in self.overrides and not self.overrides[key]['activa']:
             self._clear_override(maceta, sensor_tipo)
         
         return valor_fisico
     
-    def _apply_stabilization(self, maceta, sensor_tipo, key):
-        """Aplicar algoritmo de estabilizacion gradual."""
+    def _apply_stabilization(self, maceta, sensor_tipo, key, valor_fisico):
+        """Aplicar algoritmo de estabilizacion de 3 fases."""
         stab = self.stabilization.get(key)
         if not stab or not stab['activo']:
             self._clear_override(maceta, sensor_tipo)
-            return self.overrides.get(key, {}).get('valor', 0)
+            return valor_fisico
         
         now = time.time()
-        elapsed = now - stab['ultima_actualizacion']
+        fase = stab['fase']
         
-        # Actualizar cada 3 segundos
-        if elapsed >= 3:
-            stab['paso'] += 1
-            stab['ultima_actualizacion'] = now
-            
-            # Interpolacion lineal hacia el setpoint
-            progreso = min(stab['paso'] / stab['max_pasos'], 1.0)
-            valor_nuevo = stab['valor_inicial'] + (stab['setpoint'] - stab['valor_inicial']) * progreso
-            valor_nuevo = round(valor_nuevo, 1)
-            
-            # Actualizar el override
-            self.overrides[key]['valor'] = valor_nuevo
-            
-            print("[STAB] MAC-{} {} paso {}/{}: {} -> {} (setpoint={})".format(
-                maceta, sensor_tipo, stab['paso'], stab['max_pasos'],
-                stab['valor_inicial'], valor_nuevo, stab['setpoint']))
-            
-            # Verificar si llegamos al setpoint
-            if stab['paso'] >= stab['max_pasos']:
-                print("[STAB] MAC-{} {} estabilizado en {}".format(maceta, sensor_tipo, stab['setpoint']))
-                stab['activo'] = False
-                self.overrides[key]['activa'] = False
-                
-                # Despues de 10 segundos, limpiar el override completamente
-                # para que el ESP32 vuelva a leer del pin fisico
-                print("[OVERRIDE] MAC-{} {} volviendo a pin fisico en 10s".format(maceta, sensor_tipo))
-            
-            return valor_nuevo
+        if fase == self.PHASE_DEGRADING:
+            elapsed = now - stab['ultima_actualizacion']
+            if elapsed >= 3:
+                stab['paso'] += 1
+                stab['ultima_actualizacion'] = now
+                progreso = min(stab['paso'] / stab['max_pasos_deg'], 1.0)
+                inicio = stab['valor_fisico_inicio']
+                critico = stab['valor_critico']
+                valor_nuevo = round(inicio + (critico - inicio) * progreso, 1)
+                self.overrides[key]['valor'] = valor_nuevo
+                if stab['paso'] % 3 == 0:
+                    print("[DEGRAD] MAC-{} {} {}/{}: {} -> {}".format(
+                        maceta, sensor_tipo, stab['paso'], stab['max_pasos_deg'],
+                        inicio, valor_nuevo))
+                if stab['paso'] >= stab['max_pasos_deg']:
+                    stab['fase'] = self.PHASE_HOLDING
+                    stab['hold_inicio'] = now
+                    stab['paso'] = 0
+                    self.overrides[key]['valor'] = critico
+                    print("[HOLD] MAC-{} {} en critico {}".format(maceta, sensor_tipo, critico))
+            return self.overrides[key]['valor']
         
-        # Retorna el valor actual sin cambios
-        return self.overrides[key]['valor']
+        elif fase == self.PHASE_HOLDING:
+            if now - stab['hold_inicio'] >= stab['hold_duracion']:
+                stab['fase'] = self.PHASE_RECOVERING
+                stab['paso'] = 0
+                stab['ultima_actualizacion'] = now
+                stab['valor_fisico_inicio'] = stab['valor_critico']
+                print("[RECOVER] MAC-{} {} -> setpoint={}".format(
+                    maceta, sensor_tipo, stab['setpoint']))
+            return self.overrides[key]['valor']
+        
+        elif fase == self.PHASE_RECOVERING:
+            elapsed = now - stab['ultima_actualizacion']
+            if elapsed >= 3:
+                stab['paso'] += 1
+                stab['ultima_actualizacion'] = now
+                progreso = min(stab['paso'] / stab['max_pasos_rec'], 1.0)
+                critico = stab['valor_critico']
+                setpoint = stab['setpoint']
+                valor_nuevo = round(critico + (setpoint - critico) * progreso, 1)
+                self.overrides[key]['valor'] = valor_nuevo
+                if stab['paso'] % 5 == 0:
+                    print("[RECOVER] MAC-{} {} {}/{}: {} -> {}".format(
+                        maceta, sensor_tipo, stab['paso'], stab['max_pasos_rec'],
+                        critico, valor_nuevo))
+                if stab['paso'] >= stab['max_pasos_rec']:
+                    stab['activo'] = False
+                    self.overrides[key]['activa'] = False
+                    print("[DONE] MAC-{} {} completado".format(maceta, sensor_tipo))
+            return self.overrides[key]['valor']
+        
+        return valor_fisico
+    
+    def get_fase(self, maceta, sensor_tipo):
+        key = (maceta, sensor_tipo)
+        stab = self.stabilization.get(key)
+        if stab and stab['activo']:
+            return stab['fase']
+        return None
     
     def _clear_override(self, maceta, sensor_tipo):
-        """Limpiar override completamente."""
         key = (maceta, sensor_tipo)
         if key in self.overrides:
             del self.overrides[key]
         if key in self.stabilization:
             del self.stabilization[key]
-        print("[OVERRIDE] MAC-{} {} limpiado, controlando desde pin fisico".format(maceta, sensor_tipo))
     
     def tiene_override(self, maceta, sensor_tipo):
-        """Verificar si hay override activo."""
         key = (maceta, sensor_tipo)
         return key in self.overrides and self.overrides[key]['activa']
     
     def desactivar_todos(self):
-        """Desactivar todos los overrides (emergencia)."""
         for key in list(self.overrides.keys()):
             self.overrides[key]['activa'] = False
         for key in list(self.stabilization.keys()):
             self.stabilization[key]['activo'] = False
-        print("[OVERRIDE] Todos los overrides desactivados")
 
 # Instancia global de override
 sensor_override = SensorOverride()
@@ -307,6 +341,54 @@ i2c = I2C(0, scl=Pin(22), sda=Pin(21))
 oled = ssd1306.SSD1306_I2C(128, 64, i2c)
 
 # ============================================================
+# PCF8574 I2C EXPANDER - RELAY STATUS LEDs
+# ============================================================
+
+class PCF8574:
+    def __init__(self, i2c_bus, address=0x20):
+        self._i2c = i2c_bus
+        self._addr = address
+        self._state = 0x00
+    
+    def write_pin(self, pin, value):
+        if value:
+            self._state |= (1 << pin)
+        else:
+            self._state &= ~(1 << pin)
+        self._i2c.writeto(self._addr, bytes([self._state]))
+    
+    def write_all(self, value):
+        self._state = value & 0xFF
+        self._i2c.writeto(self._addr, bytes([self._state]))
+
+PCF8574_ADDR_1 = 0x20
+PCF8574_ADDR_2 = 0x21
+
+try:
+    pcf1 = PCF8574(i2c, PCF8574_ADDR_1)
+    pcf2 = PCF8574(i2c, PCF8574_ADDR_2)
+    pcf1.write_all(0x00)
+    pcf2.write_all(0x00)
+    print("[PCF8574] Chips 0x20 y 0x21 OK")
+except Exception as e:
+    print("[PCF8574] ERROR: {}".format(e))
+    pcf1 = None
+    pcf2 = None
+
+# ============================================================
+# LED MAP - PCF8574 PIN MAPPING FOR RELAY STATUS
+# ============================================================
+# Chip 1 (0x20): MAC-1 y MAC-2
+# Chip 2 (0x21): MAC-3 y MAC-4
+
+LED_MAP = {
+    1: {'bomba': (1, 0), 'ventilador': (1, 1), 'pulverizador': (1, 2)},
+    2: {'bomba': (1, 3), 'ventilador': (1, 4), 'pulverizador': (1, 5)},
+    3: {'bomba': (2, 0), 'ventilador': (2, 1), 'pulverizador': (2, 2)},
+    4: {'bomba': (2, 3), 'ventilador': (2, 4), 'pulverizador': (2, 5)},
+}
+
+# ============================================================
 # SENSOR MAP - MUX channels
 # ============================================================
 # C0=suelo_M1, C1=pH_M1, C2=suelo_M2, C3=pH_M2
@@ -364,6 +446,12 @@ def leer_dht(maceta):
 def set_relay(maceta, nombre, estado):
     pin = RELAYS[maceta][nombre]
     pin.value(1 if estado == 'ON' else 0)
+    led_info = LED_MAP.get(maceta, {}).get(nombre)
+    if led_info:
+        chip_num, led_pin = led_info
+        chip = pcf1 if chip_num == 1 else pcf2
+        if chip:
+            chip.write_pin(led_pin, 1 if estado == 'ON' else 0)
 
 def set_buzzer(freq, duty):
     if freq > 0:
@@ -449,7 +537,7 @@ def recibir_comandos():
         gc.collect()
     return []
 
-def recibir_alertas():
+def recibir_alertas(last_lecturas=None):
     """Recibe alertas de simulacion activas desde Supabase via bridge."""
     gc.collect()
     resp = None
@@ -472,7 +560,13 @@ def recibir_alertas():
                 if maceta and sensor_tipo and valor_forzado is not None:
                     active_keys.add((maceta, sensor_tipo))
                     if not sensor_override.tiene_override(maceta, sensor_tipo):
-                        sensor_override.set_override(maceta, sensor_tipo, float(valor_forzado))
+                        valor_fisico = float(valor_forzado)
+                        if last_lecturas and maceta in last_lecturas:
+                            vf = last_lecturas[maceta].get(sensor_tipo)
+                            if vf is not None:
+                                valor_fisico = float(vf)
+                        sensor_override.set_override(
+                            maceta, sensor_tipo, float(valor_forzado), valor_fisico)
             
             for key in list(sensor_override.overrides.keys()):
                 if key not in active_keys:
@@ -675,7 +769,7 @@ while True:
             alertas_timer += 1
             if alertas_timer >= 3:
                 alertas_timer = 0
-                recibir_alertas()
+                recibir_alertas(last_lecturas)
             
             cleanup_timer += 1
             if cleanup_timer >= 100:
