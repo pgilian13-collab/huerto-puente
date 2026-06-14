@@ -2461,16 +2461,31 @@ body {
 
     .alert-buttons {
         grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
     }
 
     .sim-card .sim-btn {
-        min-height: 50px;
-        padding: 8px 6px;
+        min-height: 56px;
+        padding: 10px 6px 6px;
+    }
+
+    .sim-card .sim-btn .material-icons-round {
+        font-size: 20px;
+    }
+
+    .sim-card .sim-btn .btn-label {
+        font-size: 9px;
+        letter-spacing: 1px;
     }
 
     .sim-input {
-        width: 60px;
+        width: 56px;
         font-size: 12px;
+        padding: 4px;
+    }
+
+    .sim-input-wrap {
+        padding: 6px 8px 8px;
     }
 }
 
@@ -2556,14 +2571,33 @@ body {
         gap: 6px;
     }
 
+    .sim-card .sim-btn {
+        min-height: 50px;
+        padding: 8px 4px 4px;
+    }
+
+    .sim-card .sim-btn .material-icons-round {
+        font-size: 18px;
+    }
+
+    .sim-card .sim-btn .btn-label {
+        font-size: 8px;
+        letter-spacing: 0.5px;
+    }
+
     .sim-input {
-        width: 55px;
+        width: 50px;
         font-size: 11px;
-        padding: 4px;
+        padding: 3px;
     }
 
     .sim-unit {
         font-size: 9px;
+    }
+
+    .sim-input-wrap {
+        padding: 5px 6px 6px;
+        gap: 3px;
     }
 
     .btn-save {
@@ -3424,23 +3458,31 @@ body {
 .alert-buttons {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
+    gap: 10px;
     margin-bottom: 1rem;
 }
 
 .sim-card {
     display: flex;
     flex-direction: column;
-    border: 2px solid #333;
-    background: #111;
+    border: 1px solid #2a2a2a;
+    background: #0d0d0d;
     position: relative;
     overflow: hidden;
+    border-radius: 4px;
+    transition: all 0.25s ease;
+}
+
+.sim-card:hover {
+    border-color: #444;
+    transform: translateY(-2px);
 }
 
 .sim-card::before {
     content: "";
     position: absolute;
     top: 0; left: 0; width: 100%; height: 3px;
+    z-index: 2;
 }
 
 .sim-card.sim-sequia::before { background: #ef4444; }
@@ -3453,31 +3495,90 @@ body {
     border: none;
     border-top: none;
     box-shadow: none;
-    min-height: 60px;
-    padding: 10px 8px;
+    min-height: 70px;
+    padding: 12px 8px 8px;
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    position: relative;
+    z-index: 1;
+    background: transparent;
 }
 
-.sim-card .sim-btn:hover {
-    box-shadow: none;
-    transform: none;
+.sim-card .sim-btn .material-icons-round {
+    font-size: 24px;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.2s ease;
 }
+
+.sim-card:hover .sim-btn .material-icons-round {
+    transform: scale(1.1);
+}
+
+.sim-card .sim-btn .btn-label {
+    position: relative;
+    z-index: 1;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.sim-card .sim-btn::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: repeating-linear-gradient(
+        45deg,
+        transparent 0px, transparent 4px,
+        rgba(255,255,255,0.015) 4px, rgba(255,255,255,0.015) 6px
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+
+.sim-sequia .sim-btn { color: #ef4444; }
+.sim-sequia:hover { border-color: #ef444433; box-shadow: 0 4px 20px rgba(239, 68, 68, 0.15); }
+.sim-sequia:hover .sim-btn { background: rgba(239, 68, 68, 0.08); }
+
+.sim-ph-bajo .sim-btn { color: #f59e0b; }
+.sim-ph-bajo:hover { border-color: #f59e0b33; box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15); }
+.sim-ph-bajo:hover .sim-btn { background: rgba(245, 158, 11, 0.08); }
+
+.sim-ph-alto .sim-btn { color: #a855f7; }
+.sim-ph-alto:hover { border-color: #a855f733; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15); }
+.sim-ph-alto:hover .sim-btn { background: rgba(168, 85, 247, 0.08); }
+
+.sim-temp-alta .sim-btn { color: #f97316; }
+.sim-temp-alta:hover { border-color: #f9731633; box-shadow: 0 4px 20px rgba(249, 115, 22, 0.15); }
+.sim-temp-alta:hover .sim-btn { background: rgba(249, 115, 22, 0.08); }
+
+.sim-hum-baja .sim-btn { color: #3b82f6; }
+.sim-hum-baja:hover { border-color: #3b82f633; box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15); }
+.sim-hum-baja:hover .sim-btn { background: rgba(59, 130, 246, 0.08); }
 
 .sim-input-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 6px 8px 8px;
-    background: #0a0a0a;
-    border-top: 1px solid #222;
+    gap: 5px;
+    padding: 8px 10px 10px;
+    background: #080808;
+    border-top: 1px solid #1e1e1e;
 }
 
 .sim-input {
-    width: 70px;
-    padding: 5px 6px;
-    background: #1a1a1a;
-    border: 1px solid #444;
+    width: 64px;
+    padding: 5px 4px;
+    background: #141414;
+    border: 1px solid #333;
+    border-radius: 3px;
     color: #e0e0e0;
     font-family: "JetBrains Mono", monospace;
     font-size: 13px;
@@ -3485,6 +3586,7 @@ body {
     text-align: center;
     outline: none;
     -moz-appearance: textfield;
+    transition: border-color 0.2s, background 0.2s;
 }
 
 .sim-input::-webkit-outer-spin-button,
@@ -3494,121 +3596,33 @@ body {
 }
 
 .sim-input:focus {
-    border-color: #888;
-    background: #222;
+    border-color: #666;
+    background: #1a1a1a;
 }
+
+.sim-sequia .sim-input:focus { border-color: #ef4444; }
+.sim-ph-bajo .sim-input:focus { border-color: #f59e0b; }
+.sim-ph-alto .sim-input:focus { border-color: #a855f7; }
+.sim-temp-alta .sim-input:focus { border-color: #f97316; }
+.sim-hum-baja .sim-input:focus { border-color: #3b82f6; }
 
 .sim-unit {
     font-family: "JetBrains Mono", monospace;
     font-size: 10px;
     font-weight: 700;
-    color: #666;
+    color: #555;
     text-transform: uppercase;
     letter-spacing: 1px;
+    min-width: 18px;
 }
 
-.sim-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 16px 8px;
-    border: none;
-    border-top: 4px solid;
-    font-family: "JetBrains Mono", monospace;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 2px;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-transform: uppercase;
-    position: relative;
-    overflow: hidden;
-    min-height: 80px;
+.sim-card.sim-active {
+    animation: sim-card-pulse 2s infinite;
 }
 
-.sim-btn::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: repeating-linear-gradient(
-        45deg,
-        transparent 0px, transparent 4px,
-        rgba(255,255,255,0.02) 4px, rgba(255,255,255,0.02) 6px
-    );
-    pointer-events: none;
-}
-
-.sim-btn .material-icons-round {
-    font-size: 22px;
-    position: relative;
-    z-index: 1;
-}
-
-.sim-btn .btn-label {
-    position: relative;
-    z-index: 1;
-}
-
-.sim-sequia {
-    background: #1a0000;
-    color: #ef4444;
-    border-top-color: #ef4444;
-    box-shadow: inset 0 4px 0 #991b1b;
-}
-.sim-sequia:hover {
-    background: #ef4444;
-    color: #fff;
-    box-shadow: inset 0 4px 0 #b91c1c;
-}
-
-.sim-ph-bajo {
-    background: #1a0f00;
-    color: #f59e0b;
-    border-top-color: #f59e0b;
-    box-shadow: inset 0 4px 0 #b45309;
-}
-.sim-ph-bajo:hover {
-    background: #f59e0b;
-    color: #000;
-    box-shadow: inset 0 4px 0 #d97706;
-}
-
-.sim-ph-alto {
-    background: #1a001a;
-    color: #a855f7;
-    border-top-color: #a855f7;
-    box-shadow: inset 0 4px 0 #7c3aed;
-}
-.sim-ph-alto:hover {
-    background: #a855f7;
-    color: #fff;
-    box-shadow: inset 0 4px 0 #9333ea;
-}
-
-.sim-temp-alta {
-    background: #1a0a00;
-    color: #f97316;
-    border-top-color: #f97316;
-    box-shadow: inset 0 4px 0 #c2410c;
-}
-.sim-temp-alta:hover {
-    background: #f97316;
-    color: #000;
-    box-shadow: inset 0 4px 0 #ea580c;
-}
-
-.sim-hum-baja {
-    background: #000a1a;
-    color: #3b82f6;
-    border-top-color: #3b82f6;
-    box-shadow: inset 0 4px 0 #1d4ed8;
-}
-.sim-hum-baja:hover {
-    background: #3b82f6;
-    color: #fff;
-    box-shadow: inset 0 4px 0 #2563eb;
+@keyframes sim-card-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.75; }
 }
 
 .sim-btn.sim-active {

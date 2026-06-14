@@ -839,7 +839,8 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
     };
     
     const btn = document.getElementById(btnMap[tipoAlerta]);
-    if (btn) btn.classList.add('sim-active');
+    const card = btn ? btn.closest('.sim-card') : null;
+    if (card) card.classList.add('sim-active');
     
     overrideStartTime = Date.now();
     if (overrideTimer) clearInterval(overrideTimer);
@@ -854,7 +855,7 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
             overrideTimer = null;
             ocultarOverrideStatus();
             resaltarSensor(sensorTipo, false);
-            if (btn) btn.classList.remove('sim-active');
+            if (card) card.classList.remove('sim-active');
             if (currentAlertaId) {
                 console.log(`[SIM] Desactivando alerta ID: ${currentAlertaId}`);
                 SupabaseClient.desactivarAlerta(currentAlertaId);
