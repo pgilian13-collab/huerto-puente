@@ -771,9 +771,20 @@ let overrideStartTime = 0;
 let currentAlertaId = null;
 const OVERRIDE_DURATION = 60000;
 
-async function enviarAlerta(tipoAlerta, sensorTipo, valorForzado) {
+const SIM_INPUT_MAP = {
+    'sequia': 'val-sequia',
+    'ph_bajo': 'val-phbajo',
+    'ph_alto': 'val-phalto',
+    'temp_alta': 'val-phalt',
+    'hum_baja': 'val-humbaja'
+};
+
+async function enviarAlerta(tipoAlerta, sensorTipo) {
     const maceta = currentMaceta;
     const dispositivoId = currentInv + 1;
+    
+    const inputEl = document.getElementById(SIM_INPUT_MAP[tipoAlerta]);
+    const valorForzado = inputEl ? parseFloat(inputEl.value) : 0;
     
     console.log(`[SIM] Enviando alerta: ${tipoAlerta} -> ${sensorTipo} = ${valorForzado} (MAC-${maceta}, DEV-${dispositivoId})`);
     
