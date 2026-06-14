@@ -23,6 +23,7 @@ WIFI_PASS = ""
 
 # Bridge en Render (Wokwi resuelve DNS externo via su proxy)
 BRIDGE_URL = "https://huerto-puente.onrender.com"
+BRIDGE_KEY = ""
 
 # ============================================================
 # SENSOR OVERRIDE - Forzado de valores por software
@@ -380,6 +381,7 @@ def enviar_lecturas(lecturas):
         resp = requests.post(
             "{}/api/lecturas".format(BRIDGE_URL),
             json=payload,
+            headers={"X-Bridge-Key": BRIDGE_KEY},
             timeout=15
         )
         code = resp.status_code
@@ -399,6 +401,7 @@ def recibir_comandos():
     try:
         resp = requests.get(
             "{}/api/comandos/{}".format(BRIDGE_URL, MODULE_ID),
+            headers={"X-Bridge-Key": BRIDGE_KEY},
             timeout=10
         )
         if resp.status_code == 200:
@@ -425,6 +428,7 @@ def recibir_comandos():
                 try:
                     r2 = requests.patch(
                         "{}/api/comando/{}/ejecutado".format(BRIDGE_URL, cmd_id),
+                        headers={"X-Bridge-Key": BRIDGE_KEY},
                         timeout=10
                     )
                     r2.close()
@@ -447,6 +451,7 @@ def recibir_alertas():
     try:
         resp = requests.get(
             "{}/api/simulacion/overrides/{}".format(BRIDGE_URL, MODULE_ID),
+            headers={"X-Bridge-Key": BRIDGE_KEY},
             timeout=10
         )
         if resp.status_code == 200:

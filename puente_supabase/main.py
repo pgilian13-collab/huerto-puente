@@ -14,11 +14,11 @@ import os
 import json
 import asyncio
 import socket
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -33,9 +33,10 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+BRIDGE_SECRET_KEY = os.getenv("BRIDGE_SECRET_KEY", "")
 
-PT_HOST = "127.0.0.1"   # IP del SBC/Server en Packet Tracer
-PT_PORT = 5000           # Puerto TCP para enviar comandos
+PT_HOST = "127.0.0.1"
+PT_PORT = 5000
 
 HEADERS_ANON = {
     "apikey": SUPABASE_ANON_KEY,
@@ -50,6 +51,14 @@ HEADERS_SERVICE = {
 }
 
 # ============================================================
+# API KEY VERIFICATION
+# ============================================================
+
+async def verify_bridge_key(x_bridge_key: str = Header(None)):
+    if BRIDGE_SECRET_KEY and x_bridge_key != BRIDGE_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Invalid bridge key")
+
+# ============================================================
 # APP LIFESPAN
 # ============================================================
 
@@ -59,15 +68,23 @@ async def lifespan(app: FastAPI):
     print("  PUENTE SUPABASE - INICIADO")
     print(f"  Supabase: {SUPABASE_URL}")
     print(f"  Packet Tracer: {PT_HOST}:{PT_PORT}")
+    print(f"  Security: {'API key active' if BRIDGE_SECRET_KEY else 'NO API KEY SET'}")
     print("=" * 50)
     yield
+    await client.aclose()
     print("Puente detenido.")
 
 app = FastAPI(title="Puente Supabase", lifespan=lifespan)
 
+ALLOWED_ORIGINS = [
+    "https://huerto-puente.onrender.com",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -82,13 +99,7 @@ client = httpx.AsyncClient(timeout=30.0)
 # ENDPOINTS PARA ESP32
 # ============================================================
 
-@app.post("/api/lectura")
-async def recibir_lectura_removed(data: dict):
-    """REMOVED: This endpoint was creating garbage data with sensor_id=0."""
-    raise HTTPException(410, "Endpoint removed. Use /api/lecturas for batch sensor data.")
-
-
-@app.post("/api/lecturas")
+@app.post("/api/lecturas", dependencies=[Depends(verify_bridge_key)])
 async def recibir_todas_lecturas(data: dict):
     """Recibe todas las lecturas de un ESP32 de una vez"""
     dispositivo_id = data.get("dispositivo_id", 1)
@@ -143,12 +154,12 @@ async def obtener_comandos(dispositivo_id: int):
         return {"comandos": []}
 
 
-@app.patch("/api/comando/{cmd_id}/ejecutado")
+@app.patch("/api/comando/{cmd_id}/ejecutado", dependencies=[Depends(verify_bridge_key)])
 async def marcar_ejecutado(cmd_id: int):
     """Marca un comando como ejecutado"""
     payload = {
         "estado_actual": "EJECUTADO",
-        "fecha_ejecucion": datetime.utcnow().isoformat(),
+        "fecha_ejecucion": datetime.now(timezone.utc).isoformat(),
     }
     try:
         resp = await client.patch(
@@ -223,7 +234,7 @@ async def obtener_overrides(dispositivo_id: int):
         return {"overrides": []}
 
 
-@app.post("/api/simulacion/alerta")
+@app.post("/api/simulacion/alerta", dependencies=[Depends(verify_bridge_key)])
 async def crear_alerta_simulacion(data: dict):
     """Crea una alerta de simulacion que el ESP32 escuchara."""
     try:
@@ -257,7 +268,7 @@ async def crear_alerta_simulacion(data: dict):
         raise HTTPException(500, str(e))
 
 
-@app.patch("/api/simulacion/alerta/{alerta_id}/desactivar")
+@app.patch("/api/simulacion/alerta/{alerta_id}/desactivar", dependencies=[Depends(verify_bridge_key)])
 async def desactivar_alerta(alerta_id: int):
     """Desactiva una alerta de simulacion."""
     payload = {"activa": False}
@@ -276,7 +287,7 @@ async def desactivar_alerta(alerta_id: int):
 # PACKET TRACER - ENVIO TCP
 # ============================================================
 
-@app.post("/api/packet-tracer")
+@app.post("/api/packet-tracer", dependencies=[Depends(verify_bridge_key)])
 async def enviar_a_packet_tracer(data: dict):
     """Envia comando al servidor SBC dentro de Cisco Packet Tracer"""
     try:
@@ -319,7 +330,7 @@ async def websocket_realtime(websocket: WebSocket):
         # Suscribirse a cambios en control_actuadores
         async with httpx.AsyncClient() as ws_client:
             # Usar polling como alternativa al WebSocket de Supabase
-            last_check = datetime.utcnow().isoformat()
+            last_check = datetime.now(timezone.utc).isoformat()
 
             while True:
                 try:
@@ -361,46 +372,8 @@ async def websocket_realtime(websocket: WebSocket):
 
 
 # ============================================================
-# ADMIN - TEMPORARY SQL EXECUTION
-# ============================================================
-
-
-# ============================================================
 # HEALTH CHECK
 # ============================================================
-
-@app.get("/test-insert")
-async def test_insert():
-    """Test directo de INSERT en Supabase"""
-    payload = {"sensor_id": 1, "valor_lectura": 25.0}
-
-    resp = await client.post(
-        f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas",
-        json=payload,
-        headers=HEADERS_SERVICE,
-    )
-    return {
-        "status": resp.status_code,
-        "body": resp.text[:500],
-    }
-
-
-@app.get("/test-data")
-async def test_data():
-    """Verificar datos en tablas"""
-    results = {}
-    for table in ["sectores", "dispositivos", "sensores", "actuadores", "tipos_sensores", "tipos_actuadores"]:
-        try:
-            resp = await client.get(
-                f"{SUPABASE_URL}/rest/v1/{table}?select=id&limit=5",
-                headers=HEADERS_SERVICE,
-            )
-            data = resp.json() if resp.status_code == 200 else []
-            results[table] = {"count": len(data), "data": data, "status": resp.status_code}
-        except Exception as e:
-            results[table] = {"error": str(e)}
-    return results
-
 
 @app.get("/")
 async def root():
@@ -432,7 +405,8 @@ async def health():
         "supabase": "connected" if supabase_ok else "disconnected",
         "supabase_detail": supabase_detail,
         "packet_tracer": f"{PT_HOST}:{PT_PORT}",
-        "timestamp": datetime.utcnow().isoformat(),
+        "security": "api_key_active" if BRIDGE_SECRET_KEY else "no_key_set",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
