@@ -53,6 +53,52 @@ const SupabaseClient = {
         }
     },
 
+    async insertReturning(table, data) {
+        const url = `${CONFIG.SUPABASE_URL}/rest/v1/${table}`;
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'apikey': CONFIG.SUPABASE_KEY,
+                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation',
+                },
+                body: JSON.stringify(data),
+            });
+            if (!resp.ok) return null;
+            const rows = await resp.json();
+            return rows && rows.length > 0 ? rows[0] : null;
+        } catch (e) {
+            console.error(`[INSERT-RETURN] Error:`, e);
+            return null;
+        }
+    },
+
+    async patch(table, id, data) {
+        const url = `${CONFIG.SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
+        try {
+            const resp = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': CONFIG.SUPABASE_KEY,
+                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal',
+                },
+                body: JSON.stringify(data),
+            });
+            return resp.ok;
+        } catch (e) {
+            console.error(`[PATCH] Error:`, e);
+            return false;
+        }
+    },
+
+    async desactivarAlerta(alertaId) {
+        return this.patch('simulacion_alertas', alertaId, { activa: false });
+    },
+
     async healthCheck() {
         try {
             const resp = await fetch(

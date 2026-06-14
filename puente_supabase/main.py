@@ -208,7 +208,7 @@ async def obtener_lecturas(dispositivo_id: int, limit: int = 50):
 # SIMULACION - MODO HIBRIDO LAZO CERRADO
 # ============================================================
 
-@app.get("/api/simulacion/overrides/{dispositivo_id}")
+@app.get("/api/simulacion/overrides/{dispositivo_id}", dependencies=[Depends(verify_bridge_key)])
 async def obtener_overrides(dispositivo_id: int):
     """Obtiene overrides activos de simulacion para un dispositivo.
     El ESP32 llama a este endpoint cada 9 segundos para verificar
@@ -221,6 +221,7 @@ async def obtener_overrides(dispositivo_id: int):
                 "dispositivo_id": f"eq.{dispositivo_id}",
                 "activa": "eq.true",
                 "order": "created_at.desc",
+                "limit": "10",
             },
             headers=HEADERS_SERVICE,
         )
@@ -232,6 +233,46 @@ async def obtener_overrides(dispositivo_id: int):
             return {"overrides": []}
     except Exception:
         return {"overrides": []}
+
+
+@app.post("/api/simulacion/cleanup", dependencies=[Depends(verify_bridge_key)])
+async def cleanup_alertas():
+    """Desactiva alertas con mas de 5 minutos de antiguedad."""
+    try:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/simulacion_alertas",
+            params={
+                "activa": "eq.true",
+                "order": "created_at.asc",
+                "limit": "50",
+            },
+            headers=HEADERS_SERVICE,
+        )
+        if resp.status_code != 200:
+            return {"cleaned": 0}
+
+        alertas = resp.json()
+        now = datetime.now(timezone.utc)
+        cleaned = 0
+        for alerta in alertas:
+            created = alerta.get("created_at", "")
+            if created:
+                try:
+                    from datetime import timezone as tz
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    age = (now - dt).total_seconds()
+                    if age > 300:
+                        await client.patch(
+                            f"{SUPABASE_URL}/rest/v1/simulacion_alertas?id=eq.{alerta['id']}",
+                            json={"activa": False},
+                            headers=HEADERS_SERVICE,
+                        )
+                        cleaned += 1
+                except Exception:
+                    pass
+        return {"cleaned": cleaned}
+    except Exception as e:
+        return {"error": str(e), "cleaned": 0}
 
 
 @app.post("/api/simulacion/alerta", dependencies=[Depends(verify_bridge_key)])

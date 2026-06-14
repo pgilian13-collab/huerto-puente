@@ -768,25 +768,17 @@ function renderSensorStats(data, cfg) {
 
 let overrideTimer = null;
 let overrideStartTime = 0;
-const OVERRIDE_DURATION = 60000; // 60 segundos para estabilizar
+let currentAlertaId = null;
+const OVERRIDE_DURATION = 60000;
 
-/**
- * Enviar alerta de simulacion al ESP32 via Supabase
- * @param {string} tipoAlerta - Tipo de alerta (sequia, ph_bajo, ph_alto, temp_alta, hum_baja)
- * @param {string} sensorTipo - Tipo de sensor (hum_suelo, ph, temp, hum_amb)
- * @param {number} valorForzado - Valor critico a forzar
- */
 async function enviarAlerta(tipoAlerta, sensorTipo, valorForzado) {
     const maceta = currentMaceta;
     const dispositivoId = currentInv + 1;
     
     console.log(`[SIM] Enviando alerta: ${tipoAlerta} -> ${sensorTipo} = ${valorForzado} (MAC-${maceta}, DEV-${dispositivoId})`);
-    console.log(`[SIM] SupabaseClient defined:`, typeof SupabaseClient);
-    console.log(`[SIM] insert method:`, typeof SupabaseClient.insert);
     
     try {
-        // Insertar en tabla simulacion_alertas via Supabase REST
-        const result = await SupabaseClient.insert('simulacion_alertas', {
+        const row = await SupabaseClient.insertReturning('simulacion_alertas', {
             tipo_alerta: tipoAlerta,
             sensor_tipo: sensorTipo,
             valor_forzado: valorForzado,
@@ -795,14 +787,11 @@ async function enviarAlerta(tipoAlerta, sensorTipo, valorForzado) {
             activa: true
         });
         
-        if (result) {
-            // Mostrar indicador visual
+        if (row) {
+            currentAlertaId = row.id;
+            console.log(`[SIM] Alerta ID: ${currentAlertaId}`);
             mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado);
-            
-            // Cambiar color de la tarjeta del sensor afectado
             resaltarSensor(sensorTipo, true);
-            
-            console.log(`[SIM] Alerta enviada exitosamente`);
         } else {
             console.error(`[SIM] Error al enviar alerta`);
         }
@@ -851,9 +840,15 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
         
         if (progress >= 100) {
             clearInterval(overrideTimer);
+            overrideTimer = null;
             ocultarOverrideStatus();
             resaltarSensor(sensorTipo, false);
             if (btn) btn.classList.remove('sim-active');
+            if (currentAlertaId) {
+                console.log(`[SIM] Desactivando alerta ID: ${currentAlertaId}`);
+                SupabaseClient.desactivarAlerta(currentAlertaId);
+                currentAlertaId = null;
+            }
         }
     }, 100);
 }

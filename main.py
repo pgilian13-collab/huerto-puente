@@ -23,7 +23,7 @@ WIFI_PASS = ""
 
 # Bridge en Render (Wokwi resuelve DNS externo via su proxy)
 BRIDGE_URL = "https://huerto-puente.onrender.com"
-BRIDGE_KEY = ""
+BRIDGE_KEY = "huerto-ccss-2026"
 
 # ============================================================
 # SENSOR OVERRIDE - Forzado de valores por software
@@ -89,6 +89,11 @@ class SensorOverride:
         key = (maceta, sensor_tipo)
         
         if key in self.overrides and self.overrides[key]['activa']:
+            age = time.time() - self.overrides[key]['timestamp']
+            if age > 90:
+                print("[OVERRIDE] MAC-{} {} TTL expirado ({:.0f}s), limpiando".format(maceta, sensor_tipo, age))
+                self._clear_override(maceta, sensor_tipo)
+                return valor_fisico
             return self._apply_stabilization(maceta, sensor_tipo, key)
         
         if key in self.overrides and not self.overrides[key]['activa']:
@@ -489,6 +494,28 @@ def ejecutar_acciones_lazo(maceta, acciones):
         print("[LAZO] MAC-{} {} -> {}".format(maceta, nombre, estado))
         gc.collect()
 
+def llamar_cleanup():
+    """Desactivar alertas antiguas (>5min) en Supabase."""
+    gc.collect()
+    resp = None
+    try:
+        resp = requests.post(
+            "{}/api/simulacion/cleanup".format(BRIDGE_URL),
+            headers={"X-Bridge-Key": BRIDGE_KEY},
+            timeout=10
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            cleaned = data.get('cleaned', 0)
+            if cleaned > 0:
+                print("[CLEANUP] {} alertas desactivadas".format(cleaned))
+    except Exception as e:
+        print("[CLEANUP] Error: {}".format(e))
+    finally:
+        if resp:
+            resp.close()
+        gc.collect()
+
 # ============================================================
 # OLED
 # ============================================================
@@ -578,6 +605,7 @@ oled_mac = 1
 oled_timer = 0
 last_lecturas = {}
 alertas_timer = 0
+cleanup_timer = 0
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
 print("=== MODO HIBRIDO ACTIVADO ===")
@@ -648,6 +676,11 @@ while True:
             if alertas_timer >= 3:
                 alertas_timer = 0
                 recibir_alertas()
+            
+            cleanup_timer += 1
+            if cleanup_timer >= 100:
+                cleanup_timer = 0
+                llamar_cleanup()
         else:
             print("[SKIP] Sin WiFi, datos solo en OLED")
 
