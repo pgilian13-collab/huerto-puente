@@ -1,4 +1,4 @@
-"""
+﻿"""
 Puente Supabase - FastAPI Server
 =================================
 Recibe datos del ESP32 (Wokwi) y los sincroniza con Supabase.
@@ -420,6 +420,10 @@ async def websocket_realtime(websocket: WebSocket):
 async def root():
     return FileResponse("static/index.html")
 
+
+@app.get("/login")
+async def login_page():
+    return FileResponse("static/login.html")
 
 @app.get("/ping")
 async def ping():

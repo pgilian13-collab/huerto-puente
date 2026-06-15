@@ -1,0 +1,67 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Huerto Inteligente</title>
+    <link rel="stylesheet" href="css/styles.css?v=3">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+</head>
+<body class="login-body">
+    <div class="stars-container">
+        <div id="stars"></div>
+        <div id="stars2"></div>
+        <div id="stars3"></div>
+    </div>
+
+    <div class="login-page">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">&#127793;</div>
+                <h1>Huerto Inteligente</h1>
+                <p class="login-subtitle">Sistema de Riego con Gemelo Digital</p>
+                <p class="login-univ">UNHEVAL - Ing. de Sistemas</p>
+            </div>
+
+            <form class="login-form" id="loginForm" onsubmit="return handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" placeholder="admin@huerto.com" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="********" required>
+                </div>
+                <button type="submit" class="btn-login" id="btnLogin">
+                    <span class="btn-login-text">Iniciar Sesion</span>
+                    <span class="btn-login-loading" style="display:none;">Cargando...</span>
+                </button>
+                <div class="login-error" id="loginError"></div>
+            </form>
+
+            <div class="login-divider"><span>o</span></div>
+
+            <button class="btn-guest" onclick="handleGuest()">
+                <span class="material-icons-round">visibility</span>
+                Entrar como Visitante (solo visualizacion)
+            </button>
+
+            <div class="login-footer">
+                <div class="login-creds">
+                    <div class="cred-item">
+                        <span class="cred-label">Admin:</span>
+                        <span class="cred-value">admin@huerto.com / admin123</span>
+                    </div>
+                    <div class="cred-item">
+                        <span class="cred-label">Visitante:</span>
+                        <span class="cred-value">cualquier email / 1234</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/auth.js?v=1"></script>
+</body>
+</html>
