@@ -1,16 +1,61 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Huerto Universitario - UNHEVAL</title>
-    <link rel="stylesheet" href="css/styles.css?v=2">
+    <link rel="stylesheet" href="css/styles.css?v=3">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
+    <script src="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"></script>`n</head>
 <body>
+    
+    <script>
+        if (!isLoggedIn()) { window.location.href = 'login.html'; }
+    </script>
+
+    <!-- SIDEBAR OVERLAY -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-logo">&#127793;</span>
+            <span class="sidebar-title">Huerto Inteligente</span>
+            <button class="sidebar-close" onclick="closeSidebar()">&#10005;</button>
+        </div>
+        <div class="sidebar-user">
+            <div class="user-avatar" id="userAvatar">A</div>
+            <div class="user-info">
+                <span class="user-email" id="userEmail">admin@huerto.com</span>
+                <span class="user-role" id="userRole">Administrador</span>
+            </div>
+        </div>
+        <div class="sidebar-menu">
+            <div class="menu-section">
+                <span class="menu-label">VISUALIZAR</span>
+                <a class="menu-item active" data-view="dashboard"><span class="material-icons-round">dashboard</span> Dashboard</a>
+                <a class="menu-item" data-view="tabla"><span class="material-icons-round">table_chart</span> Tabla de Datos</a>
+                <a class="menu-item" data-view="graficos"><span class="material-icons-round">show_chart</span> Graficos</a>
+                <a class="menu-item" data-view="reportes"><span class="material-icons-round">schedule</span> Reportes de Tiempo</a>
+            </div>
+            <div class="menu-section" id="menuAdmin" style="display:none">
+                <span class="menu-label">SIMULACION</span>
+                <a class="menu-item" data-view="juego"><span class="material-icons-round">videogame_asset</span> Huerto Challenge</a>
+                <a class="menu-item" data-view="simulacion"><span class="material-icons-round">science</span> Modo Simulacion</a>
+            </div>
+            <div class="menu-section" id="menuConfig" style="display:none">
+                <span class="menu-label">CONFIGURACION</span>
+                <a class="menu-item" data-view="config"><span class="material-icons-round">settings</span> Umbrales</a>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <a class="menu-item" id="btnLogout"><span class="material-icons-round">logout</span> Cerrar Sesion</a>
+        </div>
+    </nav>
+
     <!-- FONDO ESTRELLAS -->
     <div class="stars-container">
         <div id="stars"></div>
@@ -29,7 +74,7 @@
 
     <!-- HEADER FIJO -->
     <header class="header">
-        <div class="header-left">
+        <div class="header-left">`n            <button class="hamburger-btn" onclick="toggleSidebar()"><span class="material-icons-round">menu</span></button>
             <img src="https://www.unheval.edu.pe/portal/wp-content/uploads/2025/02/logounh-324x84-1-300x78.png" alt="UNHEVAL" class="logo-img">
             <img src="https://webs.unheval.edu.pe/public/uploads/archivos/generico/137/0_137_1759784018_0.png" alt="Ing. Sistemas" class="logo-img">
         </div>
@@ -79,6 +124,9 @@
 
     <!-- CONTENIDO PRINCIPAL -->
     <main class="main-content">
+
+        <!-- VIEW: DASHBOARD -->
+        <section class="app-view active" id="view-dashboard">
         <!-- SENSORES -->
         <div class="sensors-grid">
             <div class="sensor-card" data-sensor="temp">
@@ -523,7 +571,156 @@
                 </table>
             </div>
         </div>
-    </main>
+
+        <!-- VIEW: TABLA -->
+        <section class="app-view" id="view-tabla">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="material-icons-round">table_chart</span>
+                    <h3>Tabla de Datos - Todas las Lecturas</h3>
+                </div>
+                <div class="data-table-container" style="max-height:600px;">
+                    <table class="data-table">
+                        <thead><tr><th>ID</th><th>Sensor</th><th>Valor</th><th>Fecha</th></tr></thead>
+                        <tbody id="viewTablaBody"><tr><td colspan="4" class="table-empty">Cargando datos...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW: GRAFICOS -->
+        <section class="app-view" id="view-graficos">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="material-icons-round">show_chart</span>
+                    <h3>Graficos Historicos</h3>
+                </div>
+                <div class="chart-container" style="height:400px;"><canvas id="chartFull"></canvas></div>
+            </div>
+        </section>
+
+        <!-- VIEW: REPORTES -->
+        <section class="app-view" id="view-reportes">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="material-icons-round">schedule</span>
+                    <h3>Reportes de Tiempo</h3>
+                </div>
+                <div class="reportes-grid">
+                    <div class="reporte-card">
+                        <div class="reporte-icon"><span class="material-icons-round">access_time</span></div>
+                        <div class="reporte-label">Uptime Sistema</div>
+                        <div class="reporte-value" id="reportUptime">--</div>
+                    </div>
+                    <div class="reporte-card">
+                        <div class="reporte-icon"><span class="material-icons-round">warning</span></div>
+                        <div class="reporte-label">Alertas Totales</div>
+                        <div class="reporte-value" id="reportAlertas">0</div>
+                    </div>
+                    <div class="reporte-card">
+                        <div class="reporte-icon"><span class="material-icons-round">water_drop</span></div>
+                        <div class="reporte-label">Riegos Realizados</div>
+                        <div class="reporte-value" id="reportRiegos">0</div>
+                    </div>
+                    <div class="reporte-card">
+                        <div class="reporte-icon"><span class="material-icons-round">check_circle</span></div>
+                        <div class="reporte-label">Ciclos Completados</div>
+                        <div class="reporte-value" id="reportCiclos">0</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW: JUEGO -->
+        <section class="app-view" id="view-juego">
+            <div class="panel game-panel">
+                <div class="panel-header">
+                    <span class="material-icons-round">videogame_asset</span>
+                    <h3>Huerto Challenge: Sobrevivencia</h3>
+                    <div class="panel-tag">SYS//GAME_MODE</div>
+                </div>
+                <div class="game-stats-bar">
+                    <div class="game-stat"><span class="game-stat-label">Puntaje</span><span class="game-stat-val" id="game-score">0</span></div>
+                    <div class="game-stat"><span class="game-stat-label">Ronda</span><span class="game-stat-val" id="game-round">0/5</span></div>
+                    <div class="game-stat"><span class="game-stat-label">Correctas</span><span class="game-stat-val" id="game-correct">0</span></div>
+                    <div class="game-stat game-stat-timer"><span class="game-stat-label">Tiempo</span><span class="game-stat-val" id="game-timer">30.0s</span></div>
+                </div>
+                <div class="game-timer-bar"><div class="game-timer-fill" id="game-timer-fill"></div></div>
+                <div class="game-resources">
+                    <div class="game-resource"><span>Agua</span><div class="game-resource-bar"><div class="game-resource-fill water" id="game-water-fill"></div></div><span id="game-water-text">100%</span></div>
+                    <div class="game-resource"><span>Energia</span><div class="game-resource-bar"><div class="game-resource-fill energy" id="game-energy-fill"></div></div><span id="game-energy-text">100%</span></div>
+                </div>
+                <div class="game-main-area">
+                    <div class="game-plant-col">
+                        <div class="game-plant-label">Tu planta</div>
+                        <div class="game-plant-svg" id="gamePlantSvg"></div>
+                    </div>
+                    <div class="game-sensors-col">
+                        <div class="game-sensor-row"><span>Temp</span><span class="game-sensor-val" id="game-temp">25.0</span><span class="opt-tag">(opt: 25)</span></div>
+                        <div class="game-sensor-row"><span>HumAmb</span><span class="game-sensor-val" id="game-humamb">65.0</span><span class="opt-tag">(opt: 65)</span></div>
+                        <div class="game-sensor-row"><span>HumSuelo</span><span class="game-sensor-val" id="game-humsuelo">60.0</span><span class="opt-tag">(opt: 60)</span></div>
+                        <div class="game-sensor-row"><span>pH</span><span class="game-sensor-val" id="game-ph">6.8</span><span class="opt-tag">(opt: 6.8)</span></div>
+                    </div>
+                </div>
+                <div class="game-threat" id="game-threat" style="display:none;"></div>
+                <div class="game-feedback" id="game-feedback" style="display:none;"></div>
+                <div class="game-actions" id="game-actions" style="display:none;">
+                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('bomba')"><span class="game-action-icon">&#128167;</span><span class="game-action-label">Regar</span></button>
+                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('ventilador')"><span class="game-action-icon">&#10052;&#65039;</span><span class="game-action-label">Enfriar</span></button>
+                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('ph')"><span class="game-action-icon">&#9879;&#65039;</span><span class="game-action-label">pH</span></button>
+                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('proteger')"><span class="game-action-icon">&#128737;&#65039;</span><span class="game-action-label">Proteger</span></button>
+                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('pulverizador')"><span class="game-action-icon">&#127796;</span><span class="game-action-label">Humectar</span></button>
+                </div>
+                <div class="game-status" id="game-status">
+                    <div class="game-msg">Presiona para comenzar</div>
+                    <button class="brutalist-btn game-btn" onclick="huertoGame.startRound()">Iniciar Juego</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW: SIMULACION -->
+        <section class="app-view" id="view-simulacion">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="material-icons-round">science</span>
+                    <h3>Modo Simulacion - Lazo Cerrado</h3>
+                    <div class="panel-tag">SYS//SIM_CTRL</div>
+                </div>
+                <div class="sim-description"><span class="material-icons-round">info</span> Envie alertas de simulacion al ESP32.</div>
+                <div class="alert-buttons">
+                    <div class="sim-card sim-sequia"><button class="brutalist-btn sim-btn" id="btn-sim-sequia" onclick="enviarAlerta('sequia', 'hum_suelo')"><span class="material-icons-round">water_drop</span><span class="btn-label">SEQUIA</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-sequia" value="15.0" min="0" max="100" step="0.1"><span class="sim-unit">%</span></div></div>
+                    <div class="sim-card sim-ph-bajo"><button class="brutalist-btn sim-btn" id="btn-sim-phbajo" onclick="enviarAlerta('ph_bajo', 'ph')"><span class="material-icons-round">science</span><span class="btn-label">pH BAJO</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-phbajo" value="4.5" min="0" max="14" step="0.1"><span class="sim-unit">pH</span></div></div>
+                    <div class="sim-card sim-ph-alto"><button class="brutalist-btn sim-btn" id="btn-sim-phalto" onclick="enviarAlerta('ph_alto', 'ph')"><span class="material-icons-round">science</span><span class="btn-label">pH ALTO</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-phalto" value="9.0" min="0" max="14" step="0.1"><span class="sim-unit">pH</span></div></div>
+                    <div class="sim-card sim-temp-alta"><button class="brutalist-btn sim-btn" id="btn-sim-phalt" onclick="enviarAlerta('temp_alta', 'temp')"><span class="material-icons-round">thermostat</span><span class="btn-label">TEMP ALTA</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-phalt" value="45.0" min="-10" max="60" step="0.1"><span class="sim-unit">C</span></div></div>
+                    <div class="sim-card sim-hum-baja"><button class="brutalist-btn sim-btn" id="btn-sim-humbaja" onclick="enviarAlerta('hum_baja', 'hum_amb')"><span class="material-icons-round">air</span><span class="btn-label">HUM BAJA</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-humbaja" value="20.0" min="0" max="100" step="0.1"><span class="sim-unit">%</span></div></div>
+                </div>
+                <div id="overrideStatus" class="override-status" style="display:none;">
+                    <span class="material-icons-round">warning</span><span>OVERRIDE: </span><span id="overrideInfo"></span>
+                    <span id="overridePhaseLabel" class="override-phase-label">DEGRADANDO</span>
+                    <div class="override-progress"><div class="override-progress-bar" id="overrideProgressBar"></div></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW: CONFIG -->
+        <section class="app-view" id="view-config">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="material-icons-round">settings</span>
+                    <h3>Umbrales de Configuracion</h3>
+                </div>
+                <div class="config-grid">
+                    <div class="config-item"><label>Temp Minima</label><div class="input-group"><input type="number" id="cfg-temp-min" value="15" min="0" max="50"><span class="input-unit">C</span></div></div>
+                    <div class="config-item"><label>Temp Maxima</label><div class="input-group"><input type="number" id="cfg-temp-max" value="30" min="0" max="60"><span class="input-unit">C</span></div></div>
+                    <div class="config-item"><label>Hum. Suelo Min</label><div class="input-group"><input type="number" id="cfg-hum-min" value="40" min="0" max="100"><span class="input-unit">%</span></div></div>
+                    <div class="config-item"><label>Hum. Suelo Max</label><div class="input-group"><input type="number" id="cfg-hum-max" value="80" min="0" max="100"><span class="input-unit">%</span></div></div>
+                    <div class="config-item"><label>pH Minimo</label><div class="input-group"><input type="number" id="cfg-ph-min" value="5.5" min="0" max="14" step="0.1"><span class="input-unit">pH</span></div></div>
+                    <div class="config-item"><label>pH Maximo</label><div class="input-group"><input type="number" id="cfg-ph-max" value="7.5" min="0" max="14" step="0.1"><span class="input-unit">pH</span></div></div>
+                </div>
+                <button class="btn-save" onclick="guardarConfig()"><span class="material-icons-round">save</span> Guardar Configuracion</button>
+            </div>
+        </section>
+        </section>`n    </main>
 
     <!-- FOOTER -->
     <footer class="app-footer">
@@ -642,8 +839,8 @@
         </div>
     </div>
 
-    <script src="js/config.js?v=2"></script>
-    <script src="js/supabase-client.js?v=2"></script>
-    <script src="js/app.js?v=2"></script>
+    <script src="js/config.js?v=3"></script>`n    <script src="js/auth.js?v=1"></script>`n    <script src="js/sidebar.js?v=1"></script>`n    <script src="js/game.js?v=1"></script>
+    <script src="js/supabase-client.js?v=3"></script>
+    <script src="js/app.js?v=3"></script>
 </body>
 </html>
