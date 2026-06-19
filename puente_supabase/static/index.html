@@ -9,12 +9,11 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"></script>
 </head>
 <body>
     
     <script>
-        if (!isLoggedIn()) { window.location.href = 'login.html'; }
+        if (!isLoggedIn()) { window.location.href = '/login'; }
     </script>
 
     <!-- SIDEBAR OVERLAY -->
@@ -574,6 +573,8 @@
             </div>
         </div>
 
+        </section><!-- /view-dashboard -->
+
         <!-- VIEW: TABLA -->
         <section class="app-view" id="view-tabla">
             <div class="panel">
@@ -721,7 +722,6 @@
                 </div>
                 <button class="btn-save" onclick="guardarConfig()"><span class="material-icons-round">save</span> Guardar Configuracion</button>
             </div>
-        </section>
         </section>
     </main>
 
