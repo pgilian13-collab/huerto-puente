@@ -55,7 +55,7 @@ function handleLogin(e) {
 
         if (user) {
             storeAuth({ email: user.email, role: user.role, name: user.name });
-            window.location.href = 'index.html';
+            window.location.href = '/';
         } else {
             errEl.textContent = 'Email o password incorrectos';
             btnText.style.display = 'inline';
@@ -68,12 +68,12 @@ function handleLogin(e) {
 
 function handleGuest() {
     storeAuth({ email: 'visitante@local', role: 'visitor', name: 'Visitante' });
-    window.location.href = 'index.html';
+    window.location.href = '/';
 }
 
 function handleLogout() {
     clearAuth();
-    window.location.href = 'login.html';
+    window.location.href = '/login';
 }
 
 (function() {
