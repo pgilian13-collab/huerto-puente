@@ -7,7 +7,7 @@ let currentView = 'dashboard';
 function initSidebar() {
     var user = getCurrentUser();
     if (!user) {
-        window.location.href = 'login.html';
+        window.location.href = '/login';
         return;
     }
 

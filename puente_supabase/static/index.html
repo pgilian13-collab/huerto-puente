@@ -13,10 +13,6 @@
 </head>
 <body>
     
-    <script>
-        if (!isLoggedIn()) { window.location.href = '/login'; }
-    </script>
-
     <!-- SIDEBAR OVERLAY -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
@@ -37,23 +33,23 @@
         <div class="sidebar-menu">
             <div class="menu-section">
                 <span class="menu-label">VISUALIZAR</span>
-                <a class="menu-item active" data-view="dashboard"><span class="material-icons-round">dashboard</span> Dashboard</a>
-                <a class="menu-item" data-view="tabla"><span class="material-icons-round">table_chart</span> Tabla de Datos</a>
-                <a class="menu-item" data-view="graficos"><span class="material-icons-round">show_chart</span> Graficos</a>
-                <a class="menu-item" data-view="reportes"><span class="material-icons-round">schedule</span> Reportes de Tiempo</a>
+                <div class="menu-item active" data-view="dashboard"><span class="material-icons-round">dashboard</span> Dashboard</div>
+                <div class="menu-item" data-view="tabla"><span class="material-icons-round">table_chart</span> Tabla de Datos</div>
+                <div class="menu-item" data-view="graficos"><span class="material-icons-round">show_chart</span> Graficos</div>
+                <div class="menu-item" data-view="reportes"><span class="material-icons-round">schedule</span> Reportes de Tiempo</div>
             </div>
             <div class="menu-section" id="menuAdmin" style="display:none">
                 <span class="menu-label">SIMULACION</span>
-                <a class="menu-item" data-view="juego"><span class="material-icons-round">videogame_asset</span> Huerto Challenge</a>
-                <a class="menu-item" data-view="simulacion"><span class="material-icons-round">science</span> Modo Simulacion</a>
+                <div class="menu-item" data-view="juego"><span class="material-icons-round">videogame_asset</span> Huerto Challenge</div>
+                <div class="menu-item" data-view="simulacion"><span class="material-icons-round">science</span> Modo Simulacion</div>
             </div>
             <div class="menu-section" id="menuConfig" style="display:none">
                 <span class="menu-label">CONFIGURACION</span>
-                <a class="menu-item" data-view="config"><span class="material-icons-round">settings</span> Umbrales</a>
+                <div class="menu-item" data-view="config"><span class="material-icons-round">settings</span> Umbrales</div>
             </div>
         </div>
         <div class="sidebar-footer">
-            <a class="menu-item" id="btnLogout"><span class="material-icons-round">logout</span> Cerrar Sesion</a>
+            <div class="menu-item" id="btnLogout"><span class="material-icons-round">logout</span> Cerrar Sesion</div>
         </div>
     </nav>
 
@@ -845,6 +841,9 @@
 
     <script src="js/config.js?v=7"></script>
     <script src="js/auth.js?v=7"></script>
+    <script>
+        if (!isLoggedIn()) { window.location.href = '/login'; }
+    </script>
     <script src="js/sidebar.js?v=7"></script>
     <script src="js/game.js?v=7"></script>
     <script src="js/supabase-client.js?v=7"></script>
