@@ -63,6 +63,19 @@
         </div>
     </div>
 
-    <script src="js/auth.js?v=7"></script>
+    <script src="src/core/auth.js"></script>
+    <script>
+        if (Auth.isLoggedIn()) { window.location.href = '/'; }
+        function handleLogin(e) {
+            e.preventDefault();
+            var email = document.getElementById('loginEmail').value;
+            var pass = document.getElementById('loginPassword').value;
+            var result = Auth.login(email, pass);
+            if (result.success) { window.location.href = '/'; }
+            else { document.getElementById('loginError').textContent = 'Credenciales invalidas'; document.getElementById('loginError').style.display = 'block'; }
+            return false;
+        }
+        function handleGuest() { Auth.guestLogin(); window.location.href = '/'; }
+    </script>
 </body>
 </html>

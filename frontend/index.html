@@ -1,63 +1,45 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Huerto Universitario - UNHEVAL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCSS Huerto Inteligente - Dashboard Industrial</title>
     <link rel="icon" type="image/png" href="favicon.png">
-    <link rel="stylesheet" href="css/styles.css?v=7">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js"></script>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-    
     <!-- SIDEBAR OVERLAY -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <!-- SIDEBAR -->
-    <nav class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <span class="sidebar-logo">&#127793;</span>
-            <span class="sidebar-title">Huerto Inteligente</span>
-            <button class="sidebar-close" onclick="closeSidebar()">&#10005;</button>
-        </div>
-        <div class="sidebar-user">
-            <div class="user-avatar" id="userAvatar">A</div>
-            <div class="user-info">
-                <span class="user-email" id="userEmail">admin@huerto.com</span>
-                <span class="user-role" id="userRole">Administrador</span>
-            </div>
-        </div>
-        <div class="sidebar-menu">
-            <div class="menu-section">
-                <span class="menu-label">VISUALIZAR</span>
-                <div class="menu-item active" data-view="dashboard"><span class="material-icons-round">dashboard</span> Dashboard</div>
-                <div class="menu-item" data-view="tabla"><span class="material-icons-round">table_chart</span> Tabla de Datos</div>
-                <div class="menu-item" data-view="graficos"><span class="material-icons-round">show_chart</span> Graficos</div>
-                <div class="menu-item" data-view="reportes"><span class="material-icons-round">schedule</span> Reportes de Tiempo</div>
-            </div>
-            <div class="menu-section" id="menuAdmin" style="display:none">
-                <span class="menu-label">SIMULACION</span>
-                <div class="menu-item" data-view="juego"><span class="material-icons-round">videogame_asset</span> Huerto Challenge</div>
-            </div>
-            <div class="menu-section" id="menuConfig" style="display:none">
-                <span class="menu-label">CONFIGURACION</span>
-                <div class="menu-item" data-view="config"><span class="material-icons-round">settings</span> Umbrales</div>
-            </div>
-        </div>
-        <div class="sidebar-footer">
-            <div class="menu-item" id="btnLogout"><span class="material-icons-round">logout</span> Cerrar Sesion</div>
-        </div>
-    </nav>
+    <aside class="sidebar" id="sidebar"></aside>
 
-    <!-- FONDO ESTRELLAS -->
-    <div class="stars-container">
-        <div id="stars"></div>
-        <div id="stars2"></div>
-        <div id="stars3"></div>
-    </div>
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-left">
+            <button class="hamburger-btn"><span class="material-icons-round">menu</span></button>
+            <div class="header-title-group">
+                <h1 class="header-title">SISTEMA DE RIEGO INTELIGENTE</h1>
+                <span class="header-subtitle">UNHEVAL - Huerto Universitario</span>
+            </div>
+        </div>
+        <div class="header-center">
+            <div class="inv-tabs" id="invTabs"></div>
+        </div>
+        <div class="header-right">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">CONECTANDO</span>
+            </div>
+            <div class="live-indicator">
+                <div class="live-dot"></div>
+                LIVE
+            </div>
+        </div>
+    </header>
 
     <!-- LOADER -->
     <div class="loader-overlay" id="loader">
@@ -68,774 +50,67 @@
         </div>
     </div>
 
-    <!-- HEADER FIJO -->
-    <header class="header">
-        <div class="header-left">
-            <button class="hamburger-btn" onclick="toggleSidebar()"><span class="material-icons-round">menu</span></button>
-            <img src="https://www.unheval.edu.pe/portal/wp-content/uploads/2025/02/logounh-324x84-1-300x78.png" alt="UNHEVAL" class="logo-img">
-            <img src="https://webs.unheval.edu.pe/public/uploads/archivos/generico/137/0_137_1759784018_0.png" alt="Ing. Sistemas" class="logo-img">
-        </div>
-        <div class="header-center">
-            <span class="header-title">Huerto Inteligente</span>
-            <span class="header-subtitle">Gemelo Digital | Cisco Packet Tracer</span>
-        </div>
-        <div class="header-right">
-            <div class="status-indicator">
-                <span class="status-dot" id="statusDot"></span>
-                <span id="statusText">Conectando...</span>
-            </div>
-            <div class="live-indicator" id="liveIndicator">
-                <span class="live-dot"></span>
-                <span>LIVE</span>
-            </div>
-        </div>
-    </header>
-
-    <!-- TABS INVERNADEROS -->
-    <nav class="inv-tabs">
-        <button class="inv-tab active" onclick="selectInvernadero(0)" data-inv="0">
-            <span class="material-icons-round">eco</span>
-            INV-01
-        </button>
-        <button class="inv-tab" onclick="selectInvernadero(1)" data-inv="1">
-            <span class="material-icons-round">eco</span>
-            INV-02
-        </button>
-        <button class="inv-tab" onclick="selectInvernadero(2)" data-inv="2">
-            <span class="material-icons-round">eco</span>
-            INV-03
-        </button>
-        <button class="inv-tab" onclick="selectInvernadero(3)" data-inv="3">
-            <span class="material-icons-round">eco</span>
-            INV-04
-        </button>
-        <button class="inv-tab" onclick="selectInvernadero(4)" data-inv="4">
-            <span class="material-icons-round">eco</span>
-            INV-05
-        </button>
-    </nav>
-
-    <!-- MACETA TABS -->
-    <nav class="maceta-nav" id="macetaTabs">
-    </nav>
-
-    <!-- CONTENIDO PRINCIPAL -->
+    <!-- MAIN CONTENT -->
     <main class="main-content">
-
         <!-- VIEW: DASHBOARD -->
-        <section class="app-view active" id="view-dashboard">
-        <!-- SENSORES -->
-        <div class="sensors-grid">
-            <div class="sensor-card" data-sensor="temp">
-                <div class="card-top">
-                    <div class="card-icon temp">
-                        <span class="material-icons-round">thermostat</span>
-                    </div>
-                    <div class="card-status" id="tempStatus"></div>
-                </div>
-                <div class="card-label">Temperatura</div>
-                <div class="card-value">
-                    <span class="value" id="temp">--</span>
-                    <span class="unit">C</span>
-                </div>
-            </div>
-
-            <div class="sensor-card" data-sensor="hum_amb">
-                <div class="card-top">
-                    <div class="card-icon hum-amb">
-                        <span class="material-icons-round">air</span>
-                    </div>
-                    <div class="card-status" id="humAmbStatus"></div>
-                </div>
-                <div class="card-label">Humedad Ambiente</div>
-                <div class="card-value">
-                    <span class="value" id="humAmb">--</span>
-                    <span class="unit">%</span>
-                </div>
-            </div>
-
-            <div class="sensor-card" data-sensor="hum_suelo">
-                <div class="card-top">
-                    <div class="card-icon hum-suelo">
-                        <span class="material-icons-round">water_drop</span>
-                    </div>
-                    <div class="card-status" id="humSueloStatus"></div>
-                </div>
-                <div class="card-label">Humedad Suelo</div>
-                <div class="card-value">
-                    <span class="value" id="humSuelo">--</span>
-                    <span class="unit">%</span>
-                </div>
-            </div>
-
-            <div class="sensor-card" data-sensor="ph">
-                <div class="card-top">
-                    <div class="card-icon ph">
-                        <span class="material-icons-round">science</span>
-                    </div>
-                    <div class="card-status" id="phStatus"></div>
-                </div>
-                <div class="card-label">pH Suelo</div>
-                <div class="card-value">
-                    <span class="value" id="ph">--</span>
-                    <span class="unit">pH</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- ACTUADORES -->
-        <div class="panel">
-            <div class="panel-header">
-                <span class="material-icons-round">settings_remote</span>
-                <h3>Control de Actuadores</h3>
-                <div class="panel-tag">SYS//MANUAL_CTRL</div>
-            </div>
-            <div class="actuators-grid">
-                <!-- BOMBA -->
-                <div class="act-card" id="act-bomba">
-                    <div class="act-card-inner">
-                        <div class="act-concrete-texture"></div>
-                        <div class="act-paper-texture"></div>
-                        <div class="act-scan-line"></div>
-                        <div class="act-rivet act-rivet-tl"></div>
-                        <div class="act-rivet act-rivet-tr"></div>
-                        <div class="act-rivet act-rivet-bl"></div>
-                        <div class="act-rivet act-rivet-br"></div>
-                        <div class="act-corner act-corner-tl"></div>
-                        <div class="act-corner act-corner-tr"></div>
-                        <div class="act-corner act-corner-bl"></div>
-                        <div class="act-corner act-corner-br"></div>
-
-                        <div class="act-header">
-                            <div class="act-icon-wrap act-icon-bomba">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="3" y="8" width="12" height="10" rx="1"/>
-                                    <circle cx="9" cy="13" r="3"/>
-                                    <path d="M15 11 L21 7 V19 L15 15"/>
-                                    <line x1="6" y1="5" x2="6" y2="8"/>
-                                    <line x1="12" y1="5" x2="12" y2="8"/>
-                                </svg>
-                            </div>
-                            <div class="act-title-block">
-                                <div class="act-title">BOMBA DE RIEGO</div>
-                                <div class="act-subtitle">SYS//BOMBA_CTRL</div>
-                            </div>
-                            <div class="act-status-led" id="bomba-led"></div>
-                        </div>
-
-                        <div class="act-info-grid">
-                            <div class="act-info-item">
-                                <span class="act-info-label">GPIO</span>
-                                <span class="act-info-val">VAR</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">MODO</span>
-                                <span class="act-info-val" id="bomba-mode">MANUAL</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">PRIORIDAD</span>
-                                <span class="act-info-val" id="bomba-priority">MEDIA</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">ULTIMO ON</span>
-                                <span class="act-info-val" id="bomba-last">--:--</span>
-                            </div>
-                        </div>
-
-                        <div class="act-status-bar">
-                            <div class="act-status-fill" id="bomba-fill"></div>
-                        </div>
-
-                        <div class="act-desc">
-                            <span class="material-icons-round">info</span>
-                            Riego automatizado del sector. Se activa cuando humedad del suelo &lt; 40%.
-                        </div>
-                    </div>
-                    <button class="brutalist-btn off" id="btn-bomba" onclick="toggleActuador('bomba', currentMaceta)">
-                        <span class="material-icons-round">power_settings_new</span>
-                        <span class="btn-label">OFF</span>
-                    </button>
-                </div>
-
-                <!-- VENTILADOR -->
-                <div class="act-card" id="act-ventilador">
-                    <div class="act-card-inner">
-                        <div class="act-concrete-texture"></div>
-                        <div class="act-paper-texture"></div>
-                        <div class="act-scan-line"></div>
-                        <div class="act-rivet act-rivet-tl"></div>
-                        <div class="act-rivet act-rivet-tr"></div>
-                        <div class="act-rivet act-rivet-bl"></div>
-                        <div class="act-rivet act-rivet-br"></div>
-                        <div class="act-corner act-corner-tl"></div>
-                        <div class="act-corner act-corner-tr"></div>
-                        <div class="act-corner act-corner-bl"></div>
-                        <div class="act-corner act-corner-br"></div>
-
-                        <div class="act-header">
-                            <div class="act-icon-wrap act-icon-vent">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round">
-                                    <circle cx="12" cy="12" r="2"/>
-                                    <path d="M12 10 C12 6 9 4 7 6 C5 8 7 11 10 12"/>
-                                    <path d="M14 12 C18 12 20 9 18 7 C16 5 13 7 12 10"/>
-                                    <path d="M12 14 C12 18 15 20 17 18 C19 16 17 13 14 12"/>
-                                    <path d="M10 12 C6 12 4 15 6 17 C8 19 11 17 12 14"/>
-                                </svg>
-                            </div>
-                            <div class="act-title-block">
-                                <div class="act-title">VENTILADOR</div>
-                                <div class="act-subtitle">SYS//VENT_CTRL</div>
-                            </div>
-                            <div class="act-status-led" id="ventilador-led"></div>
-                        </div>
-
-                        <div class="act-info-grid">
-                            <div class="act-info-item">
-                                <span class="act-info-label">GPIO</span>
-                                <span class="act-info-val">VAR</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">MODO</span>
-                                <span class="act-info-val" id="ventilador-mode">MANUAL</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">PRIORIDAD</span>
-                                <span class="act-info-val" id="ventilador-priority">BAJA</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">ULTIMO ON</span>
-                                <span class="act-info-val" id="ventilador-last">--:--</span>
-                            </div>
-                        </div>
-
-                        <div class="act-status-bar">
-                            <div class="act-status-fill" id="ventilador-fill"></div>
-                        </div>
-
-                        <div class="act-desc">
-                            <span class="material-icons-round">info</span>
-                            Control de temperatura. Se activa cuando temp &gt; 30°C o humedad amb. &gt; 85%.
-                        </div>
-                    </div>
-                    <button class="brutalist-btn off" id="btn-ventilador" onclick="toggleActuador('ventilador', currentMaceta)">
-                        <span class="material-icons-round">power_settings_new</span>
-                        <span class="btn-label">OFF</span>
-                    </button>
-                </div>
-
-                <!-- PULVERIZADOR -->
-                <div class="act-card" id="act-pulverizador">
-                    <div class="act-card-inner">
-                        <div class="act-concrete-texture"></div>
-                        <div class="act-paper-texture"></div>
-                        <div class="act-scan-line"></div>
-                        <div class="act-rivet act-rivet-tl"></div>
-                        <div class="act-rivet act-rivet-tr"></div>
-                        <div class="act-rivet act-rivet-bl"></div>
-                        <div class="act-rivet act-rivet-br"></div>
-                        <div class="act-corner act-corner-tl"></div>
-                        <div class="act-corner act-corner-tr"></div>
-                        <div class="act-corner act-corner-bl"></div>
-                        <div class="act-corner act-corner-br"></div>
-
-                        <div class="act-header">
-                            <div class="act-icon-wrap act-icon-pulv">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="5" y="9" width="4" height="12" rx="1"/>
-                                    <path d="M9 12 L17 8 V16 L9 20"/>
-                                    <circle cx="19" cy="6" r="1" fill="#fff" opacity="0.7"/>
-                                    <circle cx="22" cy="4" r="1" fill="#fff" opacity="0.4"/>
-                                    <circle cx="20" cy="2" r="0.8" fill="#fff" opacity="0.3"/>
-                                    <line x1="7" y1="6" x2="7" y2="9"/>
-                                    <rect x="9" y="5" width="4" height="3" rx="0.5"/>
-                                </svg>
-                            </div>
-                            <div class="act-title-block">
-                                <div class="act-title">PULVERIZADOR</div>
-                                <div class="act-subtitle">SYS//PULV_CTRL</div>
-                            </div>
-                            <div class="act-status-led" id="pulverizador-led"></div>
-                        </div>
-
-                        <div class="act-info-grid">
-                            <div class="act-info-item">
-                                <span class="act-info-label">GPIO</span>
-                                <span class="act-info-val">VAR</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">MODO</span>
-                                <span class="act-info-val" id="pulverizador-mode">MANUAL</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">PRIORIDAD</span>
-                                <span class="act-info-val" id="pulverizador-priority">MEDIA</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">ULTIMO ON</span>
-                                <span class="act-info-val" id="pulverizador-last">--:--</span>
-                            </div>
-                        </div>
-
-                        <div class="act-status-bar">
-                            <div class="act-status-fill" id="pulverizador-fill"></div>
-                        </div>
-
-                        <div class="act-desc">
-                            <span class="material-icons-round">info</span>
-                            Nebulizacion ambiental. Se activa cuando humedad amb. &lt; 50% o temp &gt; 35°C.
-                        </div>
-                    </div>
-                    <button class="brutalist-btn off" id="btn-pulverizador" onclick="toggleActuador('pulverizador', currentMaceta)">
-                        <span class="material-icons-round">power_settings_new</span>
-                        <span class="btn-label">OFF</span>
-                    </button>
-                </div>
-
-                <!-- BUZZER -->
-                <div class="act-card" id="act-buzzer">
-                    <div class="act-card-inner">
-                        <div class="act-concrete-texture"></div>
-                        <div class="act-paper-texture"></div>
-                        <div class="act-scan-line"></div>
-                        <div class="act-rivet act-rivet-tl"></div>
-                        <div class="act-rivet act-rivet-tr"></div>
-                        <div class="act-rivet act-rivet-bl"></div>
-                        <div class="act-rivet act-rivet-br"></div>
-                        <div class="act-corner act-corner-tl"></div>
-                        <div class="act-corner act-corner-tr"></div>
-                        <div class="act-corner act-corner-bl"></div>
-                        <div class="act-corner act-corner-br"></div>
-
-                        <div class="act-header">
-                            <div class="act-icon-wrap act-icon-buzz">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="3" y="7" width="10" height="12" rx="1"/>
-                                    <path d="M13 10 L19 6 V18 L13 14"/>
-                                    <path d="M20 8 Q24 12 20 16" opacity="0.5"/>
-                                    <path d="M21 5 Q27 12 21 19" opacity="0.25"/>
-                                    <circle cx="8" cy="13" r="2" fill="#fff" opacity="0.3"/>
-                                </svg>
-                            </div>
-                            <div class="act-title-block">
-                                <div class="act-title">BUZZER ALARMA</div>
-                                <div class="act-subtitle">SYS//BUZZ_CTRL</div>
-                            </div>
-                            <div class="act-status-led" id="buzzer-led"></div>
-                        </div>
-
-                        <div class="act-info-grid">
-                            <div class="act-info-item">
-                                <span class="act-info-label">GPIO</span>
-                                <span class="act-info-val">PIN 26</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">MODO</span>
-                                <span class="act-info-val" id="buzzer-mode">AUTO</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">PRIORIDAD</span>
-                                <span class="act-info-val" id="buzzer-priority">ALTA</span>
-                            </div>
-                            <div class="act-info-item">
-                                <span class="act-info-label">ULTIMO ON</span>
-                                <span class="act-info-val" id="buzzer-last">--:--</span>
-                            </div>
-                        </div>
-
-                        <div class="act-status-bar">
-                            <div class="act-status-fill" id="buzzer-fill"></div>
-                        </div>
-
-                        <div class="act-desc">
-                            <span class="material-icons-round">info</span>
-                            Alarma sonora de emergencia. Se activa automaticamente ante valores criticos.
-                        </div>
-                    </div>
-                    <button class="brutalist-btn off" id="btn-buzzer" onclick="toggleActuador('buzzer', currentMaceta)">
-                        <span class="material-icons-round">power_settings_new</span>
-                        <span class="btn-label">OFF</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- MODO SIMULACION -->
-        <div class="panel">
-            <div class="panel-header">
-                <span class="material-icons-round">science</span>
-                <h3>Modo Simulacion - Lazo Cerrado</h3>
-                <div class="panel-tag">SYS//SIM_CTRL</div>
-            </div>
-            <div class="sim-description">
-                <span class="material-icons-round">info</span>
-                Envie alertas de simulacion al ESP32. El sistema activara automaticamente los actuadores y estabilizara el entorno.
-            </div>
-            <div class="alert-buttons">
-                <div class="sim-card sim-sequia">
-                    <button class="brutalist-btn sim-btn" id="btn-sim-sequia" onclick="enviarAlerta('sequia', 'hum_suelo')">
-                        <span class="material-icons-round">water_drop</span>
-                        <span class="btn-label">SEQUIA</span>
-                    </button>
-                    <div class="sim-input-wrap">
-                        <input type="number" class="sim-input" id="val-sequia" value="15.0" min="0" max="100" step="0.1">
-                        <span class="sim-unit">%</span>
-                    </div>
-                </div>
-                <div class="sim-card sim-ph">
-                    <button class="brutalist-btn sim-btn" id="btn-sim-ph" onclick="enviarAlerta('ph', 'ph')">
-                        <span class="material-icons-round">science</span>
-                        <span class="btn-label">pH</span>
-                    </button>
-                    <div class="sim-input-wrap">
-                        <input type="number" class="sim-input" id="val-ph" value="4.5" min="0" max="14" step="0.1">
-                        <span class="sim-unit">pH</span>
-                    </div>
-                </div>
-                <div class="sim-card sim-temp">
-                    <button class="brutalist-btn sim-btn" id="btn-sim-temp" onclick="enviarAlerta('temp', 'temp')">
-                        <span class="material-icons-round">thermostat</span>
-                        <span class="btn-label">TEMP</span>
-                    </button>
-                    <div class="sim-input-wrap">
-                        <input type="number" class="sim-input" id="val-temp" value="45.0" min="-10" max="60" step="0.1">
-                        <span class="sim-unit">°C</span>
-                    </div>
-                </div>
-                <div class="sim-card sim-hum">
-                    <button class="brutalist-btn sim-btn" id="btn-sim-hum" onclick="enviarAlerta('hum_amb', 'hum_amb')">
-                        <span class="material-icons-round">air</span>
-                        <span class="btn-label">HUMEDAD</span>
-                    </button>
-                    <div class="sim-input-wrap">
-                        <input type="number" class="sim-input" id="val-hum" value="20.0" min="0" max="100" step="0.1">
-                        <span class="sim-unit">%</span>
-                    </div>
-                </div>
-            </div>
-            <div id="overrideStatus" class="override-status" style="display: none;">
-                <span class="material-icons-round">warning</span>
-                <span>OVERRIDE: </span>
-                <span id="overrideInfo"></span>
-                <span id="overridePhaseLabel" class="override-phase-label">DEGRADANDO</span>
-                <div class="override-progress">
-                    <div class="override-progress-bar" id="overrideProgressBar"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- GRAFICO -->
-        <div class="panel">
-            <div class="panel-header">
-                <span class="material-icons-round">timeline</span>
-                <h3>Historico - Ultimas 24 Horas</h3>
-                <div class="panel-header-actions">
-                    <span class="auto-refresh-label" id="autoRefreshLabel">Auto 10s</span>
-                    <button class="btn-toggle-data" id="btnRefreshHistorico" onclick="cargarHistorico()">
-                        <span class="material-icons-round">refresh</span>
-                    </button>
-                    <button class="btn-toggle-data" id="btnToggleData" onclick="toggleVistaDatos()">
-                        <span class="material-icons-round">table_chart</span>
-                        <span>Tabla</span>
-                    </button>
-                </div>
-            </div>
-            <div class="chart-container" id="chartContainer">
-                <canvas id="chartHistorico"></canvas>
-            </div>
-            <div class="data-table-container" id="dataTableContainer" style="display:none;">
-                <table class="data-table" id="dataTable">
-                    <thead>
-                        <tr>
-                            <th>Hora</th>
-                            <th>Temp °C</th>
-                            <th>HumAmb %</th>
-                            <th>HumSuelo %</th>
-                            <th>pH</th>
-                        </tr>
-                    </thead>
-                    <tbody id="dataTableBody">
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        </section><!-- /view-dashboard -->
+        <section class="app-view" id="view-dashboard"></section>
 
         <!-- VIEW: TABLA -->
-        <section class="app-view" id="view-tabla">
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="material-icons-round">table_chart</span>
-                    <h3>Tabla de Datos - Todas las Lecturas</h3>
-                </div>
-                <div class="data-table-container" style="max-height:600px;">
-                    <table class="data-table">
-                        <thead><tr><th>ID</th><th>Sensor</th><th>Valor</th><th>Fecha</th></tr></thead>
-                        <tbody id="viewTablaBody"><tr><td colspan="4" class="table-empty">Cargando datos...</td></tr></tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
+        <section class="app-view" id="view-tabla"></section>
 
         <!-- VIEW: GRAFICOS -->
-        <section class="app-view" id="view-graficos">
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="material-icons-round">show_chart</span>
-                    <h3>Graficos Historicos</h3>
-                </div>
-                <div class="chart-container" style="height:400px;"><canvas id="chartFull"></canvas></div>
-            </div>
-        </section>
+        <section class="app-view" id="view-graficos"></section>
 
         <!-- VIEW: REPORTES -->
-        <section class="app-view" id="view-reportes">
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="material-icons-round">schedule</span>
-                    <h3>Reportes de Tiempo</h3>
-                </div>
-                <div class="reportes-grid">
-                    <div class="reporte-card">
-                        <div class="reporte-icon"><span class="material-icons-round">access_time</span></div>
-                        <div class="reporte-label">Uptime Sistema</div>
-                        <div class="reporte-value" id="reportUptime">--</div>
-                    </div>
-                    <div class="reporte-card">
-                        <div class="reporte-icon"><span class="material-icons-round">warning</span></div>
-                        <div class="reporte-label">Alertas Totales</div>
-                        <div class="reporte-value" id="reportAlertas">0</div>
-                    </div>
-                    <div class="reporte-card">
-                        <div class="reporte-icon"><span class="material-icons-round">water_drop</span></div>
-                        <div class="reporte-label">Riegos Realizados</div>
-                        <div class="reporte-value" id="reportRiegos">0</div>
-                    </div>
-                    <div class="reporte-card">
-                        <div class="reporte-icon"><span class="material-icons-round">check_circle</span></div>
-                        <div class="reporte-label">Ciclos Completados</div>
-                        <div class="reporte-value" id="reportCiclos">0</div>
-                    </div>
-                </div>
-            </div>
-        </section>
+        <section class="app-view" id="view-reportes"></section>
 
         <!-- VIEW: JUEGO -->
-        <section class="app-view" id="view-juego">
-            <div class="panel game-panel">
-                <div class="panel-header">
-                    <span class="material-icons-round">videogame_asset</span>
-                    <h3>Huerto Challenge: Sobrevivencia</h3>
-                    <div class="panel-tag">SYS//GAME_MODE</div>
-                </div>
-                <div class="game-stats-bar">
-                    <div class="game-stat"><span class="game-stat-label">Puntaje</span><span class="game-stat-val" id="game-score">0</span></div>
-                    <div class="game-stat"><span class="game-stat-label">Ronda</span><span class="game-stat-val" id="game-round">0/5</span></div>
-                    <div class="game-stat"><span class="game-stat-label">Correctas</span><span class="game-stat-val" id="game-correct">0</span></div>
-                    <div class="game-stat"><span class="game-stat-label">Combo</span><span class="game-stat-val game-combo-val" id="game-combo">-</span></div>
-                    <div class="game-stat game-stat-timer"><span class="game-stat-label">Tiempo</span><span class="game-stat-val" id="game-timer">30.0s</span></div>
-                </div>
-                <div class="game-timer-bar"><div class="game-timer-fill" id="game-timer-fill"></div></div>
-                <div class="game-resources">
-                    <div class="game-resource"><span>Agua</span><div class="game-resource-bar"><div class="game-resource-fill water" id="game-water-fill"></div></div><span id="game-water-text">100%</span></div>
-                    <div class="game-resource"><span>Energia</span><div class="game-resource-bar"><div class="game-resource-fill energy" id="game-energy-fill"></div></div><span id="game-energy-text">100%</span></div>
-                </div>
-                <div class="game-main-area">
-                    <div class="game-plant-col">
-                        <div class="game-plant-label">Tu planta</div>
-                        <div class="game-plant-svg" id="gamePlantSvg"></div>
-                    </div>
-                    <div class="game-sensors-col">
-                        <div class="game-sensor-row"><span>Temp</span><span class="game-sensor-val" id="game-temp">25.0</span><span class="opt-tag">(opt: 25)</span></div>
-                        <div class="game-sensor-row"><span>HumAmb</span><span class="game-sensor-val" id="game-humamb">65.0</span><span class="opt-tag">(opt: 65)</span></div>
-                        <div class="game-sensor-row"><span>HumSuelo</span><span class="game-sensor-val" id="game-humsuelo">60.0</span><span class="opt-tag">(opt: 60)</span></div>
-                        <div class="game-sensor-row"><span>pH</span><span class="game-sensor-val" id="game-ph">6.8</span><span class="opt-tag">(opt: 6.8)</span></div>
-                    </div>
-                </div>
-                <div class="game-threat" id="game-threat" style="display:none;"></div>
-                <div class="game-feedback" id="game-feedback" style="display:none;"></div>
-                <div class="game-actions" id="game-actions" style="display:none;">
-                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('bomba')"><span class="game-action-icon">&#128167;</span><span class="game-action-label">Regar</span></button>
-                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('ventilador')"><span class="game-action-icon">&#10052;&#65039;</span><span class="game-action-label">Enfriar</span></button>
-                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('ph')"><span class="game-action-icon">&#9879;&#65039;</span><span class="game-action-label">pH</span></button>
-                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('proteger')"><span class="game-action-icon">&#128737;&#65039;</span><span class="game-action-label">Proteger</span></button>
-                    <button class="game-action-btn" onclick="huertoGame.respondToThreat('pulverizador')"><span class="game-action-icon">&#127796;</span><span class="game-action-label">Humectar</span></button>
-                </div>
-                <div class="game-status" id="game-status">
-                    <div class="game-msg">Presiona para comenzar</div>
-                    <button class="brutalist-btn game-btn" onclick="huertoGame.startRound()">Iniciar Juego</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- VIEW: SIMULACION -->
-        <section class="app-view" id="view-simulacion">
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="material-icons-round">science</span>
-                    <h3>Modo Simulacion - Lazo Cerrado</h3>
-                    <div class="panel-tag">SYS//SIM_CTRL</div>
-                </div>
-                <div class="sim-description"><span class="material-icons-round">info</span> Envie alertas de simulacion al ESP32.</div>
-                <div class="alert-buttons">
-                    <div class="sim-card sim-sequia"><button class="brutalist-btn sim-btn" id="btn-sim-sequia" onclick="enviarAlerta('sequia', 'hum_suelo')"><span class="material-icons-round">water_drop</span><span class="btn-label">SEQUIA</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-sequia" value="15.0" min="0" max="100" step="0.1"><span class="sim-unit">%</span></div></div>
-                    <div class="sim-card sim-ph"><button class="brutalist-btn sim-btn" id="btn-sim-ph" onclick="enviarAlerta('ph', 'ph')"><span class="material-icons-round">science</span><span class="btn-label">pH</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-ph" value="4.5" min="0" max="14" step="0.1"><span class="sim-unit">pH</span></div></div>
-                    <div class="sim-card sim-temp"><button class="brutalist-btn sim-btn" id="btn-sim-temp" onclick="enviarAlerta('temp', 'temp')"><span class="material-icons-round">thermostat</span><span class="btn-label">TEMP</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-temp" value="45.0" min="-10" max="60" step="0.1"><span class="sim-unit">C</span></div></div>
-                    <div class="sim-card sim-hum"><button class="brutalist-btn sim-btn" id="btn-sim-hum" onclick="enviarAlerta('hum_amb', 'hum_amb')"><span class="material-icons-round">air</span><span class="btn-label">HUMEDAD</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-hum" value="20.0" min="0" max="100" step="0.1"><span class="sim-unit">%</span></div></div>
-                </div>
-                <div id="overrideStatus" class="override-status" style="display:none;">
-                    <span class="material-icons-round">warning</span><span>OVERRIDE: </span><span id="overrideInfo"></span>
-                    <span id="overridePhaseLabel" class="override-phase-label">DEGRADANDO</span>
-                    <div class="override-progress"><div class="override-progress-bar" id="overrideProgressBar"></div></div>
-                </div>
-            </div>
-        </section>
+        <section class="app-view" id="view-juego"></section>
 
         <!-- VIEW: CONFIG -->
-        <section class="app-view" id="view-config">
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="material-icons-round">settings</span>
-                    <h3>Umbrales de Configuracion</h3>
-                </div>
-                <div class="config-grid">
-                    <div class="config-item"><label>Temp Minima</label><div class="input-group"><input type="number" id="cfg-temp-min" value="15" min="0" max="50"><span class="input-unit">C</span></div></div>
-                    <div class="config-item"><label>Temp Maxima</label><div class="input-group"><input type="number" id="cfg-temp-max" value="30" min="0" max="60"><span class="input-unit">C</span></div></div>
-                    <div class="config-item"><label>Hum. Suelo Min</label><div class="input-group"><input type="number" id="cfg-hum-min" value="40" min="0" max="100"><span class="input-unit">%</span></div></div>
-                    <div class="config-item"><label>Hum. Suelo Max</label><div class="input-group"><input type="number" id="cfg-hum-max" value="80" min="0" max="100"><span class="input-unit">%</span></div></div>
-                    <div class="config-item"><label>pH Minimo</label><div class="input-group"><input type="number" id="cfg-ph-min" value="5.5" min="0" max="14" step="0.1"><span class="input-unit">pH</span></div></div>
-                    <div class="config-item"><label>pH Maximo</label><div class="input-group"><input type="number" id="cfg-ph-max" value="7.5" min="0" max="14" step="0.1"><span class="input-unit">pH</span></div></div>
-                </div>
-                <button class="btn-save" onclick="guardarConfig()"><span class="material-icons-round">save</span> Guardar Configuracion</button>
-            </div>
-        </section>
+        <section class="app-view" id="view-config"></section>
     </main>
 
-    <!-- FOOTER -->
-    <footer class="app-footer">
-        <span>Universidad Nacional Hermilio Valdizan | Facultad de Ingenieria de Sistemas</span>
-        <span>Sistema de Riego Inteligente con Gemelo Digital</span>
-    </footer>
-
-    <!-- BOTON FLOTANTE CONFIG -->
-    <button class="fab-config" id="fabConfig" title="Configuracion de umbrales">
-        <span class="material-icons-round">settings</span>
-    </button>
-
-    <!-- MODAL CONFIG -->
-    <div class="modal-overlay" id="configModal">
-        <div class="modal-box">
-            <div class="modal-header">
-                <span class="material-icons-round">settings</span>
-                <h3>Umbrales de Configuracion</h3>
-                <button class="modal-close" id="modalClose">
-                    <span class="material-icons-round">close</span>
-                </button>
-            </div>
-            <div class="config-grid">
-                <div class="config-item">
-                    <label>Temp Minima</label>
-                    <div class="input-group">
-                        <input type="number" id="cfg-temp-min" value="15" min="0" max="50">
-                        <span class="input-unit">°C</span>
-                    </div>
-                </div>
-                <div class="config-item">
-                    <label>Temp Maxima</label>
-                    <div class="input-group">
-                        <input type="number" id="cfg-temp-max" value="30" min="0" max="60">
-                        <span class="input-unit">°C</span>
-                    </div>
-                </div>
-                <div class="config-item">
-                    <label>Hum. Suelo Min</label>
-                    <div class="input-group">
-                        <input type="number" id="cfg-hum-min" value="40" min="0" max="100">
-                        <span class="input-unit">%</span>
-                    </div>
-                </div>
-                <div class="config-item">
-                    <label>Hum. Suelo Max</label>
-                    <div class="input-group">
-                        <input type="number" id="cfg-hum-max" value="80" min="0" max="100">
-                        <span class="input-unit">%</span>
-                    </div>
-                </div>
-                <div class="config-item">
-                    <label>pH Minimo</label>
-                    <div class="input-group">
-                        <input type="number" id="cfg-ph-min" value="5.5" min="0" max="14" step="0.1">
-                        <span class="input-unit">pH</span>
-                    </div>
-                </div>
-                <div class="config-item">
-                    <label>pH Maximo</label>
-                    <div class="input-group">
-                        <input type="number" id="cfg-ph-max" value="7.5" min="0" max="14" step="0.1">
-                        <span class="input-unit">pH</span>
-                    </div>
-                </div>
-            </div>
-            <button class="btn-save" onclick="guardarConfig(); closeModal();">
-                <span class="material-icons-round">save</span>
-                Guardar Configuracion
-            </button>
-        </div>
-    </div>
-
-    <!-- MODAL DETALLE SENSOR -->
+    <!-- MODALS -->
     <div class="modal-overlay" id="sensorModal">
-        <div class="modal-box modal-sensor">
+        <div class="modal-box modal-large">
             <div class="modal-header">
-                <span class="material-icons-round" id="sensorModalIcon">thermostat</span>
-                <h3 id="sensorModalTitle">Detalle Sensor</h3>
-                <button class="modal-close" id="sensorModalClose">
-                    <span class="material-icons-round">close</span>
-                </button>
+                <span class="material-icons-round" id="sensorModalIcon">sensors</span>
+                <span id="sensorModalTitle">Detalle Sensor</span>
+                <button class="modal-close" id="sensorModalClose"><span class="material-icons-round">close</span></button>
             </div>
             <div class="sensor-modal-tabs">
-                <button class="sensor-tab active" data-view="tabla" id="sensorTabTabla">
-                    <span class="material-icons-round">table_chart</span> Tabla
-                </button>
-                <button class="sensor-tab" data-view="grafico" id="sensorTabGrafico">
-                    <span class="material-icons-round">show_chart</span> Grafico
-                </button>
+                <div class="sensor-tab active" id="sensorTabGrafico" onclick="EventBus.emit('sensor-modal:view', 'grafico')"><span class="material-icons-round">timeline</span> Grafico</div>
+                <div class="sensor-tab" id="sensorTabTabla" onclick="EventBus.emit('sensor-modal:view', 'tabla')"><span class="material-icons-round">table_chart</span> Tabla</div>
             </div>
             <div class="sensor-modal-body">
-                <div id="sensorTablaView">
-                    <div class="data-table-container" style="max-height:350px;">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Fecha/Hora</th>
-                                    <th id="sensorTablaCol">Valor</th>
-                                    <th>Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody id="sensorTablaBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-                <div id="sensorGraficoView" style="display:none;">
-                    <div class="sensor-chart-container">
-                        <canvas id="sensorChart"></canvas>
-                    </div>
-                </div>
+                <div id="sensorGraficoView"><div class="sensor-chart-container"><canvas id="sensorChart"></canvas></div></div>
+                <div id="sensorTablaView" style="display:none"><div class="data-table-container"><table class="data-table"><thead><tr><th>Fecha</th><th>Valor</th></tr></thead><tbody id="sensorTablaBody"></tbody></table></div></div>
             </div>
-            <div class="sensor-modal-footer">
-                <div class="sensor-stats" id="sensorStats"></div>
-            </div>
+            <div class="sensor-modal-footer" id="sensorStats"></div>
         </div>
     </div>
 
-    <script src="js/config.js?v=7"></script>
-    <script src="js/auth.js?v=7"></script>
+    <!-- CORE -->
+    <script src="src/core/eventBus.js"></script>
+    <script src="src/core/state.js"></script>
+    <script src="src/core/router.js"></script>
+    <script src="src/core/moduleLoader.js"></script>
+    <script src="src/services/api.js"></script>
+    <script src="src/services/sensorService.js"></script>
+    <script src="src/services/actuatorService.js"></script>
+
+    <!-- COMPONENTS -->
+    <script src="src/components/sidebar/sidebar.js"></script>
+
+    <!-- APP -->
+    <script src="src/core/app.js"></script>
+
+    <!-- BOOT -->
     <script>
-        if (!isLoggedIn()) { window.location.href = '/login'; }
+        ModuleLoader.setBase('');
+        SidebarComponent.init();
+        App.init();
     </script>
-    <script src="js/sidebar.js?v=7"></script>
-    <script src="js/game.js?v=7"></script>
-    <script src="js/supabase-client.js?v=7"></script>
-    <script src="js/app.js?v=7"></script>
 </body>
 </html>

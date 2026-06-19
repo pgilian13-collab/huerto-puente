@@ -472,3 +472,4 @@ if __name__ == "__main__":
 # Archivos estaticos del frontend (al final para no capturar API routes)
 app.mount("/css", StaticFiles(directory="static/css"), name="css")
 app.mount("/js", StaticFiles(directory="static/js"), name="js")
+app.mount("/src", StaticFiles(directory="static/src"), name="src")
