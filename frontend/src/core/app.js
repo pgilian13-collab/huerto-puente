@@ -64,6 +64,34 @@ var App = (function() {
             });
         });
 
+        // 8. Listen for actuator toggle
+        EventBus.on('actuator:toggle', function(actuatorName) {
+            var inv = AppState.get('currentInv') || 0;
+            var deviceId = inv + 1;
+            var mac = AppState.get('currentMaceta') || 1;
+            var actuators = AppState.get('actuators') || [];
+            var act = null;
+            for (var i = 0; i < actuators.length; i++) {
+                if (actuators[i].maceta_num === mac && actuators[i].nombre_actuador === actuatorName) {
+                    act = actuators[i];
+                    break;
+                }
+            }
+            if (!act) {
+                console.error('[ACT] Actuador no encontrado:', actuatorName, 'MAC-' + mac);
+                return;
+            }
+            var currentBtn = document.getElementById('btn-' + actuatorName);
+            var isOn = currentBtn && currentBtn.classList.contains('on');
+            var newEstado = isOn ? 'OFF' : 'ON';
+
+            ActuatorService.toggleActuador(act.id, act.nombre_actuador, act.pin_conexion, newEstado, deviceId).then(function(res) {
+                if (res && res.success) {
+                    console.log('[ACT] ' + actuatorName + ' -> ' + newEstado);
+                }
+            });
+        });
+
         // 7. Init greenhouse tabs
         initInvTabs();
 
@@ -106,13 +134,13 @@ var App = (function() {
             }
         });
 
+        // graficos and config are now part of dashboard
         Router.register('graficos', {
-            load: function(done) {
-                ModuleLoader.loadBundle(
-                    ['src/views/history/history.js'],
-                    ['css/modules/history.css']
-                ).then(function() { done(window.HistoryModule); });
-            }
+            load: function(done) { Router.navigate('dashboard'); }
+        });
+
+        Router.register('config', {
+            load: function(done) { Router.navigate('dashboard'); }
         });
 
         Router.register('reportes', {
@@ -134,12 +162,7 @@ var App = (function() {
         });
 
         Router.register('config', {
-            load: function(done) {
-                ModuleLoader.loadBundle(
-                    ['src/views/config/config.js'],
-                    ['css/modules/config.css']
-                ).then(function() { done(window.ConfigModule); });
-            }
+            load: function(done) { Router.navigate('dashboard'); }
         });
     }
 

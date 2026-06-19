@@ -15,8 +15,7 @@ var SidebarComponent = (function() {
         {
             label: 'MONITOREO',
             items: [
-                { id: 'tabla', icon: 'sensors', label: 'Sensores' },
-                { id: 'graficos', icon: 'timeline', label: 'Graficos' }
+                { id: 'tabla', icon: 'table_chart', label: 'Tabla Sensores' }
             ]
         },
         {
@@ -30,13 +29,6 @@ var SidebarComponent = (function() {
             adminOnly: true,
             items: [
                 { id: 'juego', icon: 'videogame_asset', label: 'Huerto Challenge' }
-            ]
-        },
-        {
-            label: 'ADMINISTRACION',
-            adminOnly: true,
-            items: [
-                { id: 'config', icon: 'settings', label: 'Configuracion' }
             ]
         }
     ];
