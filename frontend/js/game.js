@@ -1,5 +1,10 @@
 ﻿// ============================================================
-// GAME.JS - Huerto Challenge: Sobrevivencia
+// GAME.JS - Huerto Challenge v2: Sobrevivencia Extrema
+// ============================================================
+// Sensors drift passively toward danger every tick.
+// Threats actively push sensors worse if ignored.
+// Combos reward consecutive correct responses.
+// Water/Energy regenerate slowly but deplete on actions.
 // ============================================================
 
 var GAME_BRIDGE = "https://huerto-puente.onrender.com";
@@ -7,34 +12,44 @@ var GAME_BRIDGE = "https://huerto-puente.onrender.com";
 var OPTIMAL = { temp: 25, hum_amb: 65, hum_suelo: 60, ph: 6.8 };
 
 var ROUNDS = [
-    { name: "Dia Normal", desc: "Calor + sequia ligera", init: { temp: 32, hum_amb: 40, hum_suelo: 25, ph: 5.0 } },
-    { name: "Sequia Severa", desc: "Todo seco, pH alto", init: { temp: 38, hum_amb: 15, hum_suelo: 8, ph: 9.0 } },
-    { name: "Noche Fria", desc: "Frio extremo", init: { temp: 8, hum_amb: 90, hum_suelo: 80, ph: 7.0 } },
-    { name: "Tormenta", desc: "Exceso de agua", init: { temp: 15, hum_amb: 95, hum_suelo: 90, ph: 6.0 } },
-    { name: "Ola de Calor", desc: "Extremo final", init: { temp: 45, hum_amb: 25, hum_suelo: 15, ph: 8.5 } }
+    { name: "Dia Normal",     desc: "Calor ligero + sequia leve",      time: 35, driftSpeed: 1.0, threatRate: 4000, init: { temp: 30, hum_amb: 45, hum_suelo: 30, ph: 5.5 } },
+    { name: "Sequia Severa",  desc: "Todo seco, pH disparado",         time: 30, driftSpeed: 1.3, threatRate: 3500, init: { temp: 36, hum_amb: 20, hum_suelo: 10, ph: 8.8 } },
+    { name: "Noche Fria",     desc: "Frio extremo, humedad al maximo", time: 30, driftSpeed: 1.2, threatRate: 3000, init: { temp: 5,  hum_amb: 92, hum_suelo: 85, ph: 6.5 } },
+    { name: "Tormenta",       desc: "Exceso de agua + viento",         time: 28, driftSpeed: 1.5, threatRate: 2800, init: { temp: 12, hum_amb: 97, hum_suelo: 95, ph: 5.8 } },
+    { name: "Ola de Calor",   desc: "Extremo total - 45C",             time: 25, driftSpeed: 1.8, threatRate: 2500, init: { temp: 45, hum_amb: 15, hum_suelo: 8,  ph: 9.2 } }
 ];
 
 var PLANT_STAGES = [
-    { min: 0,   name: "Semilla marchita", emoji: "\uD83D\uDC80", cssClass: "stage-wilted" },
-    { min: 200, name: "Brote debil",      emoji: "\uD83C\uDF31", cssClass: "stage-sprout" },
-    { min: 400, name: "Planta joven",     emoji: "\uD83C\uDF3F", cssClass: "stage-small" },
-    { min: 600, name: "Planta fuerte",    emoji: "\uD83C\uDF33", cssClass: "stage-strong" },
-    { min: 800, name: "Floracion",        emoji: "\uD83C\uDF38", cssClass: "stage-flower" },
-    { min: 950, name: "Fruto maduro",     emoji: "\uD83C\uDF4E", cssClass: "stage-fruit" }
+    { min: 0,   name: "Semilla marchita", cssClass: "stage-wilted" },
+    { min: 300, name: "Brote debil",      cssClass: "stage-sprout" },
+    { min: 700, name: "Planta joven",     cssClass: "stage-small" },
+    { min: 1200,name: "Planta fuerte",    cssClass: "stage-strong" },
+    { min: 1800,name: "Floracion",        cssClass: "stage-flower" },
+    { min: 2500,name: "Fruto maduro",     cssClass: "stage-fruit" }
 ];
 
 var THREATS = [
-    { type: "sequia",     icon: "\uD83C\uDFDC\uFE0F", label: "Sequia detectada",  sensor: "hum_suelo", bad: 10,  action: "bomba" },
-    { type: "calor",      icon: "\uD83D\uDD25",        label: "Calor extremo",     sensor: "temp",      bad: 42, action: "ventilador" },
-    { type: "ph_bajo",    icon: "\u2697\uFE0F",        label: "pH muy acido",      sensor: "ph",        bad: 3.8, action: "ph" },
-    { type: "ph_alto",    icon: "\u2623\uFE0F",        label: "pH muy alcalino",   sensor: "ph",        bad: 9.5, action: "ph" },
-    { type: "plaga",      icon: "\uD83D\uDC1B",        label: "Plaga detectada",   sensor: null,        bad: null, action: "proteger" },
-    { type: "hum_baja",   icon: "\uD83C\uDF2C\uFE0F",  label: "Aire muy seco",     sensor: "hum_amb",   bad: 15, action: "pulverizador" }
+    { type: "sequia",     icon: "\uD83C\uDFDC\uFE0F", label: "Sequia extrema!",      sensor: "hum_suelo", damage: -12, action: "bomba",       hint: "Regar" },
+    { type: "calor",      icon: "\uD83D\uDD25",        label: "Ola de calor!",        sensor: "temp",      damage: 6,   action: "ventilador",   hint: "Enfriar" },
+    { type: "frio",       icon: "\u2744\uFE0F",        label: "Frio polar!",          sensor: "temp",      damage: -8,  action: "ventilador",   hint: "Calentar" },
+    { type: "ph_bajo",    icon: "\u2697\uFE0F",        label: "pH muy acido!",        sensor: "ph",        damage: -1.2,action: "ph",           hint: "Ajustar pH" },
+    { type: "ph_alto",    icon: "\u2623\uFE0F",        label: "pH muy alcalino!",     sensor: "ph",        damage: 1.5, action: "ph",           hint: "Ajustar pH" },
+    { type: "hum_baja",   icon: "\uD83C\uDF2C\uFE0F",  label: "Aire deshidratado!",   sensor: "hum_amb",   damage: -10, action: "pulverizador", hint: "Humectar" },
+    { type: "hum_alta",   icon: "\uD83C\uDF27\uFE0F",  label: "Humedad letal!",       sensor: "hum_amb",   damage: 8,   action: "ventilador",   hint: "Ventilar" },
+    { type: "plaga",      icon: "\uD83D\uDC1B",        label: "Plaga invasora!",      sensor: null,        damage: null,action: "proteger",     hint: "Proteger" }
 ];
+
+var DANGER_ZONES = {
+    temp:     { min: 10, max: 35 },
+    hum_amb:  { min: 25, max: 85 },
+    hum_suelo:{ min: 20, max: 80 },
+    ph:       { min: 5.5, max: 8.0 }
+};
 
 function HuertoChallenge() {
     this.currentRound = 0;
-    this.timeLeft = 30;
+    this.timeLeft = 35;
+    this.maxTime = 35;
     this.score = 0;
     this.totalScore = 0;
     this.playing = false;
@@ -43,12 +58,23 @@ function HuertoChallenge() {
     this.currentThreat = null;
     this.threatTimeout = null;
     this.correctCount = 0;
+    this.missCount = 0;
     this.totalTaps = 0;
     this.water = 100;
     this.energy = 100;
+    this.maxWater = 100;
+    this.maxEnergy = 100;
     this.sensors = { temp: 25, hum_amb: 65, hum_suelo: 60, ph: 6.8 };
+    this.sensorColors = { temp: '', hum_amb: '', hum_suelo: '', ph: '' };
     this.plantStage = 0;
     this.history = [];
+    this.combo = 0;
+    this.maxCombo = 0;
+    this.multiplier = 1;
+    this.driftTimer = null;
+    this.threatCount = 0;
+    this.sensorsFixed = 0;
+    this.roundActive = false;
 }
 
 HuertoChallenge.prototype.reset = function() {
@@ -57,8 +83,11 @@ HuertoChallenge.prototype.reset = function() {
     this.score = 0;
     this.playing = false;
     this.correctCount = 0;
+    this.missCount = 0;
     this.totalTaps = 0;
     this.plantStage = 0;
+    this.combo = 0;
+    this.maxCombo = 0;
     this.history = [];
     this.updateUI();
     this.showRoundInfo();
@@ -67,19 +96,28 @@ HuertoChallenge.prototype.reset = function() {
 HuertoChallenge.prototype.startRound = function() {
     var round = ROUNDS[this.currentRound];
     this.sensors = JSON.parse(JSON.stringify(round.init));
-    this.timeLeft = 30;
+    this.timeLeft = round.time;
+    this.maxTime = round.time;
     this.score = 0;
     this.water = 100;
     this.energy = 100;
     this.playing = true;
+    this.roundActive = true;
     this.correctCount = 0;
+    this.missCount = 0;
     this.currentThreat = null;
+    this.threatCount = 0;
+    this.sensorsFixed = 0;
+    this.combo = 0;
+    this.multiplier = 1;
 
     this.updateSensorDisplay();
     this.updateUI();
     this.showRoundStart(round);
 
     var self = this;
+
+    // Main timer: 100ms ticks
     this.timer = setInterval(function() {
         self.timeLeft -= 0.1;
         if (self.timeLeft <= 0) {
@@ -89,99 +127,199 @@ HuertoChallenge.prototype.startRound = function() {
         self.updateTimerUI();
     }, 100);
 
-    this.scheduleThreat();
+    // Sensor drift: every 800ms, sensors drift toward danger
+    this.driftTimer = setInterval(function() {
+        if (!self.roundActive) return;
+        self.applyDrift(round.driftSpeed);
+        self.regenerateResources();
+        self.updateSensorDisplay();
+        self.updateUI();
+    }, 800);
+
+    this.scheduleThreat(round.threatRate);
 };
 
-HuertoChallenge.prototype.scheduleThreat = function() {
+HuertoChallenge.prototype.applyDrift = function(speed) {
+    var drift = 0.4 * speed;
+    // Sensors drift away from optimal naturally
+    if (this.sensors.temp > OPTIMAL.temp) {
+        this.sensors.temp += drift * (0.3 + Math.random() * 0.4);
+    } else {
+        this.sensors.temp -= drift * (0.3 + Math.random() * 0.4);
+    }
+    if (this.sensors.hum_suelo > OPTIMAL.hum_suelo) {
+        this.sensors.hum_suelo -= drift * (0.5 + Math.random() * 0.5);
+    } else {
+        this.sensors.hum_suelo += drift * (0.5 + Math.random() * 0.5);
+    }
+    // pH drifts slowly
+    if (this.sensors.ph > OPTIMAL.ph) {
+        this.sensors.ph += drift * 0.05 * (Math.random() > 0.5 ? 1 : -1);
+    } else {
+        this.sensors.ph -= drift * 0.05 * (Math.random() > 0.5 ? 1 : -1);
+    }
+    // Humidity ambient drifts slightly
+    if (this.sensors.hum_amb > OPTIMAL.hum_amb) {
+        this.sensors.hum_amb -= drift * 0.2;
+    } else {
+        this.sensors.hum_amb += drift * 0.2;
+    }
+
+    // Clamp all values
+    this.sensors.temp = Math.max(-5, Math.min(55, this.sensors.temp));
+    this.sensors.hum_amb = Math.max(0, Math.min(100, this.sensors.hum_amb));
+    this.sensors.hum_suelo = Math.max(0, Math.min(100, this.sensors.hum_suelo));
+    this.sensors.ph = Math.max(2, Math.min(12, this.sensors.ph));
+
+    // Score bonus for being close to optimal
+    var dist = this.getDistance();
+    if (dist < 10) {
+        this.score += Math.round(3 * this.multiplier);
+        this.totalScore += Math.round(3 * this.multiplier);
+        this.sensorsFixed++;
+    }
+};
+
+HuertoChallenge.prototype.regenerateResources = function() {
+    this.water = Math.min(this.maxWater, this.water + 0.8);
+    this.energy = Math.min(this.maxEnergy, this.energy + 0.6);
+};
+
+HuertoChallenge.prototype.scheduleThreat = function(rate) {
     if (!this.playing) return;
     var self = this;
-    var delay = 2000 + Math.random() * 3000;
+    var delay = (rate || 4000) + Math.random() * 2000;
     this.threatTimer = setTimeout(function() {
-        if (self.playing) {
+        if (self.playing && self.roundActive) {
             self.spawnThreat();
         }
     }, delay);
 };
 
 HuertoChallenge.prototype.spawnThreat = function() {
-    if (!this.playing) return;
+    if (!this.playing || !this.roundActive) return;
     var idx = Math.floor(Math.random() * THREATS.length);
     this.currentThreat = THREATS[idx];
+    this.threatCount++;
     this.showThreat(this.currentThreat);
 
     var self = this;
+    // Threat auto-misses after 4 seconds
     this.threatTimeout = setTimeout(function() {
         if (self.playing && self.currentThreat) {
             self.missThreat();
         }
-    }, 5000);
+    }, 4000);
 };
 
 HuertoChallenge.prototype.respondToThreat = function(actionType) {
-    if (!this.playing || !this.currentThreat) return;
+    if (!this.playing || !this.roundActive || !this.currentThreat) return;
     if (this.currentThreat.action !== actionType) return;
 
+    // Resource check
     if (actionType === 'bomba' && this.water < 15) return;
     if (actionType === 'ventilador' && this.energy < 10) return;
     if (actionType === 'pulverizador' && this.water < 10) return;
+    if (actionType === 'ph' && (this.energy < 5 || this.water < 5)) return;
 
     clearTimeout(this.threatTimeout);
     this.totalTaps++;
     this.correctCount++;
+    this.combo++;
+    if (this.combo > this.maxCombo) this.maxCombo = this.combo;
 
-    var points = 50;
+    // Multiplier: 1x base, +0.5x per 3 combo streak
+    this.multiplier = 1 + Math.floor(this.combo / 3) * 0.5;
+
+    // Base points * multiplier
+    var basePoints = 50;
+    var points = Math.round(basePoints * this.multiplier);
     this.score += points;
     this.totalScore += points;
 
+    // Apply resource cost
     if (actionType === 'bomba') {
         this.water -= 15;
-        this.sensors.hum_suelo = Math.min(100, this.sensors.hum_suelo + 8);
+        this.sensors.hum_suelo = Math.min(100, this.sensors.hum_suelo + 12);
     } else if (actionType === 'ventilador') {
         this.energy -= 10;
-        this.sensors.temp = Math.max(-5, this.sensors.temp - 4);
+        this.sensors.temp = Math.max(-5, this.sensors.temp - 6);
+        this.sensors.hum_amb = Math.max(0, this.sensors.hum_amb - 3);
     } else if (actionType === 'pulverizador') {
         this.water -= 10;
-        this.sensors.hum_amb = Math.min(100, this.sensors.hum_amb + 6);
+        this.sensors.hum_amb = Math.min(100, this.sensors.hum_amb + 10);
     } else if (actionType === 'ph') {
         this.energy -= 5;
         this.water -= 5;
-        this.sensors.ph = this.sensors.ph < 7 ? Math.min(7.5, this.sensors.ph + 0.5) : Math.max(6.0, this.sensors.ph - 0.5);
+        this.sensors.ph = this.sensors.ph < 7
+            ? Math.min(7.5, this.sensors.ph + 0.8)
+            : Math.max(6.0, this.sensors.ph - 0.8);
+    } else if (actionType === 'proteger') {
+        this.energy -= 8;
     }
 
     this.currentThreat = null;
     this.updateSensorDisplay();
-    this.showActionFeedback(points, true);
+    this.showActionFeedback(points, true, this.combo);
     this.updateUI();
 
     var self = this;
     setTimeout(function() {
         self.hideThreat();
-        self.scheduleThreat();
-    }, 600);
+        if (self.roundActive) {
+            self.scheduleThreat(ROUNDS[self.currentRound].threatRate);
+        }
+    }, 400);
 };
 
 HuertoChallenge.prototype.missThreat = function() {
     this.totalTaps++;
-    this.score = Math.max(0, this.score - 20);
-    this.totalScore = Math.max(0, this.totalScore - 20);
+    this.missCount++;
+    this.combo = 0;
+    this.multiplier = 1;
+
+    var penalty = 25;
+    this.score = Math.max(0, this.score - penalty);
+    this.totalScore = Math.max(0, this.totalScore - penalty);
+
+    // Missed threat actively damages sensors
+    if (this.currentThreat && this.currentThreat.sensor) {
+        var sensor = this.currentThreat.sensor;
+        var dmg = this.currentThreat.damage;
+        if (typeof dmg === 'number') {
+            this.sensors[sensor] += dmg;
+            this.sensors.temp = Math.max(-5, Math.min(55, this.sensors.temp));
+            this.sensors.hum_amb = Math.max(0, Math.min(100, this.sensors.hum_amb));
+            this.sensors.hum_suelo = Math.max(0, Math.min(100, this.sensors.hum_suelo));
+            this.sensors.ph = Math.max(2, Math.min(12, this.sensors.ph));
+        }
+    }
+
     this.currentThreat = null;
-    this.showActionFeedback(-20, false);
+    this.showActionFeedback(-penalty, false, 0);
+    this.updateSensorDisplay();
     this.updateUI();
     this.hideThreat();
-    this.scheduleThreat();
+
+    var self = this;
+    if (this.roundActive) {
+        this.scheduleThreat(ROUNDS[this.currentRound].threatRate);
+    }
 };
 
 HuertoChallenge.prototype.endRound = function() {
     this.playing = false;
-    clearTimeout(this.timer);
+    this.roundActive = false;
+    clearInterval(this.timer);
+    clearInterval(this.driftTimer);
     clearTimeout(this.threatTimer);
     clearTimeout(this.threatTimeout);
 
-    var dist = Math.abs(this.sensors.temp - OPTIMAL.temp) +
-               Math.abs(this.sensors.hum_amb - OPTIMAL.hum_amb) +
-               Math.abs(this.sensors.hum_suelo - OPTIMAL.hum_suelo) +
-               Math.abs(this.sensors.ph - OPTIMAL.ph);
-    var roundScore = Math.max(0, Math.round(1000 - dist * 10));
+    var dist = this.getDistance();
+    var proximityScore = Math.max(0, Math.round(1000 - dist * 15));
+    var bonusScore = this.correctCount * 30;
+    var comboBonus = this.maxCombo * 10;
+    var roundScore = proximityScore + bonusScore + comboBonus;
     this.score = roundScore;
     this.totalScore += roundScore;
 
@@ -191,6 +329,8 @@ HuertoChallenge.prototype.endRound = function() {
         name: ROUNDS[this.currentRound].name,
         score: roundScore,
         correct: this.correctCount,
+        missed: this.missCount,
+        maxCombo: this.maxCombo,
         sensors: JSON.parse(JSON.stringify(this.sensors))
     });
 
@@ -214,7 +354,6 @@ HuertoChallenge.prototype.updatePlantStage = function() {
             break;
         }
     }
-    this.updatePlantSVG();
 };
 
 HuertoChallenge.prototype.getDistance = function() {
@@ -222,6 +361,17 @@ HuertoChallenge.prototype.getDistance = function() {
            Math.abs(this.sensors.hum_amb - OPTIMAL.hum_amb) +
            Math.abs(this.sensors.hum_suelo - OPTIMAL.hum_suelo) +
            Math.abs(this.sensors.ph - OPTIMAL.ph);
+};
+
+HuertoChallenge.prototype.getSensorStatus = function(key) {
+    var val = this.sensors[key];
+    var zone = DANGER_ZONES[key];
+    if (val < zone.min || val > zone.max) return 'danger';
+    var mid = (zone.min + zone.max) / 2;
+    var range = (zone.max - zone.min) / 2;
+    var dist = Math.abs(val - mid) / range;
+    if (dist > 0.7) return 'warning';
+    return 'ok';
 };
 
 // ============================================================
@@ -239,15 +389,18 @@ HuertoChallenge.prototype.updateUI = function() {
     el = document.getElementById('game-correct');
     if (el) el.textContent = this.correctCount;
 
+    el = document.getElementById('game-combo');
+    if (el) el.textContent = this.combo > 0 ? 'x' + this.multiplier.toFixed(1) : '-';
+
     el = document.getElementById('game-water-fill');
     if (el) el.style.width = this.water + '%';
     el = document.getElementById('game-water-text');
-    if (el) el.textContent = this.water + '%';
+    if (el) el.textContent = Math.round(this.water) + '%';
 
     el = document.getElementById('game-energy-fill');
     if (el) el.style.width = this.energy + '%';
     el = document.getElementById('game-energy-text');
-    if (el) el.textContent = this.energy + '%';
+    if (el) el.textContent = Math.round(this.energy) + '%';
 
     this.updatePlantSVG();
 };
@@ -256,19 +409,30 @@ HuertoChallenge.prototype.updateTimerUI = function() {
     var el = document.getElementById('game-timer');
     if (el) el.textContent = this.timeLeft.toFixed(1) + 's';
     var bar = document.getElementById('game-timer-fill');
-    if (bar) bar.style.width = ((this.timeLeft / 30) * 100) + '%';
+    if (bar) bar.style.width = ((this.timeLeft / this.maxTime) * 100) + '%';
+    // Flash red when low
+    if (bar && this.timeLeft < 8) {
+        bar.style.background = '#ef4444';
+    } else if (bar) {
+        bar.style.background = '';
+    }
 };
 
 HuertoChallenge.prototype.updateSensorDisplay = function() {
-    var el;
-    el = document.getElementById('game-temp');
-    if (el) el.textContent = this.sensors.temp.toFixed(1);
-    el = document.getElementById('game-humamb');
-    if (el) el.textContent = this.sensors.hum_amb.toFixed(1);
-    el = document.getElementById('game-humsuelo');
-    if (el) el.textContent = this.sensors.hum_suelo.toFixed(1);
-    el = document.getElementById('game-ph');
-    if (el) el.textContent = this.sensors.ph.toFixed(1);
+    var keys = ['temp', 'hum_amb', 'hum_suelo', 'ph'];
+    var ids = { temp: 'game-temp', hum_amb: 'game-humamb', hum_suelo: 'game-humsuelo', ph: 'game-ph' };
+    var units = { temp: '\u00B0C', hum_amb: '%', hum_suelo: '%', ph: '' };
+    var decimals = { temp: 1, hum_amb: 1, hum_suelo: 1, ph: 1 };
+
+    for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        var el = document.getElementById(ids[k]);
+        if (el) {
+            el.textContent = this.sensors[k].toFixed(decimals[k]) + units[k];
+            var status = this.getSensorStatus(k);
+            el.className = 'game-sensor-val sensor-' + status;
+        }
+    }
 };
 
 HuertoChallenge.prototype.updatePlantSVG = function() {
@@ -290,96 +454,76 @@ HuertoChallenge.prototype.getPlantSVG = function(stage) {
 };
 
 HuertoChallenge.prototype.svgWilted = function() {
-    return '<svg viewBox="0 0 200 300" width="200" height="300">' +
+    return '<svg viewBox="0 0 200 300" width="100%" height="100%">' +
         '<rect x="80" y="270" width="40" height="8" rx="2" fill="#3d2b1f"/>' +
         '<ellipse cx="100" cy="262" rx="14" ry="7" fill="#555"/>' +
         '<line x1="100" y1="262" x2="95" y2="275" stroke="#444" stroke-width="1.5"/>' +
-        '<text x="100" y="245" text-anchor="middle" font-size="24">&#128164;</text>' +
+        '<text x="100" y="235" text-anchor="middle" font-size="40">&#128164;</text>' +
         '</svg>';
 };
 
 HuertoChallenge.prototype.svgSprout = function() {
-    return '<svg viewBox="0 0 200 300" width="200" height="300">' +
+    return '<svg viewBox="0 0 200 300" width="100%" height="100%">' +
         '<rect x="80" y="270" width="40" height="8" rx="2" fill="#3d2b1f"/>' +
-        '<line x1="100" y1="270" x2="100" y2="210" stroke="#228B22" stroke-width="3" class="plant-grow">' +
-        '<animate attributeName="y2" from="270" to="210" dur="0.6s" fill="freeze"/>' +
+        '<line x1="100" y1="270" x2="100" y2="200" stroke="#228B22" stroke-width="3">' +
+        '<animate attributeName="y2" from="270" to="200" dur="0.6s" fill="freeze"/>' +
         '</line>' +
-        '<ellipse cx="90" cy="212" rx="10" ry="6" fill="#90EE90" transform="rotate(-30 90 212)">' +
-        '<animate attributeName="rx" from="0" to="10" dur="0.4s" fill="freeze"/>' +
-        '</ellipse>' +
-        '<ellipse cx="110" cy="218" rx="10" ry="6" fill="#90EE90" transform="rotate(30 110 218)">' +
-        '<animate attributeName="rx" from="0" to="10" dur="0.4s" begin="0.2s" fill="freeze"/>' +
-        '</ellipse>' +
+        '<ellipse cx="85" cy="202" rx="12" ry="7" fill="#90EE90" transform="rotate(-30 85 202)"/>' +
+        '<ellipse cx="115" cy="208" rx="12" ry="7" fill="#90EE90" transform="rotate(30 115 208)"/>' +
         '</svg>';
 };
 
 HuertoChallenge.prototype.svgSmall = function() {
-    return '<svg viewBox="0 0 200 300" width="200" height="300">' +
+    return '<svg viewBox="0 0 200 300" width="100%" height="100%">' +
         '<rect x="80" y="270" width="40" height="8" rx="2" fill="#3d2b1f"/>' +
-        '<line x1="100" y1="270" x2="100" y2="160" stroke="#228B22" stroke-width="4">' +
-        '<animate attributeName="y2" from="270" to="160" dur="0.5s" fill="freeze"/>' +
-        '</line>' +
-        '<ellipse cx="75" cy="195" rx="18" ry="10" fill="#32CD32" transform="rotate(-40 75 195)"/>' +
-        '<ellipse cx="125" cy="190" rx="18" ry="10" fill="#32CD32" transform="rotate(40 125 190)"/>' +
-        '<ellipse cx="80" cy="168" rx="14" ry="8" fill="#228B22" transform="rotate(-30 80 168)"/>' +
-        '<ellipse cx="120" cy="165" rx="14" ry="8" fill="#228B22" transform="rotate(30 120 165)"/>' +
+        '<line x1="100" y1="270" x2="100" y2="155" stroke="#228B22" stroke-width="4"/>' +
+        '<ellipse cx="72" cy="190" rx="20" ry="11" fill="#32CD32" transform="rotate(-40 72 190)"/>' +
+        '<ellipse cx="128" cy="185" rx="20" ry="11" fill="#32CD32" transform="rotate(40 128 185)"/>' +
+        '<ellipse cx="78" cy="162" rx="16" ry="9" fill="#228B22" transform="rotate(-30 78 162)"/>' +
+        '<ellipse cx="122" cy="158" rx="16" ry="9" fill="#228B22" transform="rotate(30 122 158)"/>' +
         '</svg>';
 };
 
 HuertoChallenge.prototype.svgStrong = function() {
-    return '<svg viewBox="0 0 200 300" width="200" height="300">' +
+    return '<svg viewBox="0 0 200 300" width="100%" height="100%">' +
         '<rect x="75" y="270" width="50" height="10" rx="3" fill="#3d2b1f"/>' +
-        '<line x1="100" y1="270" x2="100" y2="110" stroke="#006400" stroke-width="6">' +
-        '<animate attributeName="y2" from="270" to="110" dur="0.5s" fill="freeze"/>' +
-        '</line>' +
-        '<ellipse cx="60" cy="185" rx="25" ry="14" fill="#228B22" transform="rotate(-50 60 185)"/>' +
-        '<ellipse cx="140" cy="180" rx="25" ry="14" fill="#228B22" transform="rotate(50 140 180)"/>' +
-        '<ellipse cx="68" cy="145" rx="20" ry="11" fill="#32CD32" transform="rotate(-35 68 145)"/>' +
-        '<ellipse cx="132" cy="140" rx="20" ry="11" fill="#32CD32" transform="rotate(35 132 140)"/>' +
-        '<ellipse cx="80" cy="118" rx="16" ry="9" fill="#228B22"/>' +
-        '<ellipse cx="120" cy="115" rx="16" ry="9" fill="#228B22"/>' +
+        '<line x1="100" y1="270" x2="100" y2="105" stroke="#006400" stroke-width="6"/>' +
+        '<ellipse cx="55" cy="180" rx="28" ry="15" fill="#228B22" transform="rotate(-50 55 180)"/>' +
+        '<ellipse cx="145" cy="175" rx="28" ry="15" fill="#228B22" transform="rotate(50 145 175)"/>' +
+        '<ellipse cx="65" cy="140" rx="22" ry="12" fill="#32CD32" transform="rotate(-35 65 140)"/>' +
+        '<ellipse cx="135" cy="135" rx="22" ry="12" fill="#32CD32" transform="rotate(35 135 135)"/>' +
+        '<ellipse cx="80" cy="112" rx="18" ry="10" fill="#228B22"/>' +
+        '<ellipse cx="120" cy="108" rx="18" ry="10" fill="#228B22"/>' +
         '</svg>';
 };
 
 HuertoChallenge.prototype.svgFlower = function() {
-    return '<svg viewBox="0 0 200 300" width="200" height="300">' +
+    return '<svg viewBox="0 0 200 300" width="100%" height="100%">' +
         '<rect x="72" y="270" width="56" height="10" rx="3" fill="#3d2b1f"/>' +
-        '<line x1="100" y1="270" x2="100" y2="80" stroke="#006400" stroke-width="6">' +
-        '<animate attributeName="y2" from="270" to="80" dur="0.5s" fill="freeze"/>' +
-        '</line>' +
-        '<ellipse cx="50" cy="175" rx="28" ry="15" fill="#228B22" transform="rotate(-55 50 175)"/>' +
-        '<ellipse cx="150" cy="170" rx="28" ry="15" fill="#228B22" transform="rotate(55 150 170)"/>' +
-        '<circle cx="100" cy="72" r="20" fill="#FF69B4">' +
-        '<animate attributeName="r" from="0" to="20" dur="0.4s" fill="freeze"/>' +
-        '</circle>' +
-        '<circle cx="78" cy="62" r="11" fill="#FFB6C1"/>' +
-        '<circle cx="122" cy="62" r="11" fill="#FFB6C1"/>' +
-        '<circle cx="82" cy="88" r="11" fill="#FFB6C1"/>' +
-        '<circle cx="118" cy="88" r="11" fill="#FFB6C1"/>' +
-        '<circle cx="100" cy="58" r="7" fill="#FFD700"/>' +
+        '<line x1="100" y1="270" x2="100" y2="78" stroke="#006400" stroke-width="6"/>' +
+        '<ellipse cx="48" cy="170" rx="30" ry="16" fill="#228B22" transform="rotate(-55 48 170)"/>' +
+        '<ellipse cx="152" cy="165" rx="30" ry="16" fill="#228B22" transform="rotate(55 152 165)"/>' +
+        '<circle cx="100" cy="70" r="22" fill="#FF69B4"/>' +
+        '<circle cx="76" cy="58" r="12" fill="#FFB6C1"/>' +
+        '<circle cx="124" cy="58" r="12" fill="#FFB6C1"/>' +
+        '<circle cx="80" cy="86" r="12" fill="#FFB6C1"/>' +
+        '<circle cx="120" cy="86" r="12" fill="#FFB6C1"/>' +
+        '<circle cx="100" cy="54" r="8" fill="#FFD700"/>' +
         '</svg>';
 };
 
 HuertoChallenge.prototype.svgFruit = function() {
-    return '<svg viewBox="0 0 200 300" width="200" height="300">' +
+    return '<svg viewBox="0 0 200 300" width="100%" height="100%">' +
         '<rect x="68" y="270" width="64" height="12" rx="4" fill="#3d2b1f"/>' +
-        '<line x1="100" y1="270" x2="100" y2="60" stroke="#006400" stroke-width="7">' +
-        '<animate attributeName="y2" from="270" to="60" dur="0.5s" fill="freeze"/>' +
-        '</line>' +
-        '<ellipse cx="40" cy="165" rx="32" ry="17" fill="#228B22" transform="rotate(-55 40 165)"/>' +
-        '<ellipse cx="160" cy="160" rx="32" ry="17" fill="#228B22" transform="rotate(55 160 160)"/>' +
-        '<circle cx="72" cy="112" r="24" fill="#FF4444">' +
-        '<animate attributeName="r" from="0" to="24" dur="0.3s" fill="freeze"/>' +
-        '</circle>' +
-        '<circle cx="128" cy="102" r="22" fill="#FF4444">' +
-        '<animate attributeName="r" from="0" to="22" dur="0.3s" begin="0.1s" fill="freeze"/>' +
-        '</circle>' +
-        '<circle cx="100" cy="75" r="28" fill="#FF3333">' +
-        '<animate attributeName="r" from="0" to="28" dur="0.3s" begin="0.2s" fill="freeze"/>' +
-        '</circle>' +
-        '<circle cx="88" cy="65" r="5" fill="rgba(255,255,255,0.4)"/>' +
-        '<circle cx="68" cy="103" r="4" fill="rgba(255,255,255,0.3)"/>' +
-        '<circle cx="120" cy="93" r="4" fill="rgba(255,255,255,0.3)"/>' +
+        '<line x1="100" y1="270" x2="100" y2="55" stroke="#006400" stroke-width="7"/>' +
+        '<ellipse cx="38" cy="160" rx="34" ry="18" fill="#228B22" transform="rotate(-55 38 160)"/>' +
+        '<ellipse cx="162" cy="155" rx="34" ry="18" fill="#228B22" transform="rotate(55 162 155)"/>' +
+        '<circle cx="70" cy="108" r="26" fill="#FF4444"/>' +
+        '<circle cx="130" cy="98" r="24" fill="#FF4444"/>' +
+        '<circle cx="100" cy="70" r="30" fill="#FF3333"/>' +
+        '<circle cx="86" cy="60" r="6" fill="rgba(255,255,255,0.4)"/>' +
+        '<circle cx="66" cy="100" r="5" fill="rgba(255,255,255,0.3)"/>' +
+        '<circle cx="122" cy="90" r="5" fill="rgba(255,255,255,0.3)"/>' +
         '</svg>';
 };
 
@@ -391,13 +535,14 @@ HuertoChallenge.prototype.showRoundInfo = function() {
     var el = document.getElementById('game-status');
     if (!el) return;
     if (this.currentRound >= ROUNDS.length) {
-        el.innerHTML = '<div class="game-msg game-msg-done">Juego completado! Puntaje final: <strong>' + this.totalScore + '</strong></div>' +
+        el.innerHTML = '<div class="game-msg game-msg-done">Juego completado! Puntaje: <strong>' + this.totalScore + '</strong></div>' +
             '<button class="brutalist-btn game-btn" onclick="huertoGame.reset()">Jugar de nuevo</button>';
     } else {
         var r = ROUNDS[this.currentRound];
         el.innerHTML = '<div class="game-msg">Ronda ' + (this.currentRound + 1) + ': <strong>' + r.name + '</strong></div>' +
             '<div class="game-msg-sub">' + r.desc + '</div>' +
-            '<div class="game-msg-sub">Lleva los sensoles al valor optimo en 30 segundos</div>' +
+            '<div class="game-msg-sub">Mantene los sensores en zona verde + responde amenazas</div>' +
+            '<div class="game-msg-sub">Combos correctos dan x' + (1 + Math.floor(3/3)*0.5).toFixed(1) + '+ multiplicador</div>' +
             '<button class="brutalist-btn game-btn" onclick="huertoGame.startRound()">Iniciar Ronda</button>';
     }
     document.getElementById('game-actions').style.display = 'none';
@@ -414,11 +559,13 @@ HuertoChallenge.prototype.showRoundStart = function(round) {
 HuertoChallenge.prototype.showThreat = function(threat) {
     var el = document.getElementById('game-threat');
     if (!el) return;
-    el.style.display = 'block';
+    el.style.display = 'flex';
     el.innerHTML = '<div class="threat-icon">' + threat.icon + '</div>' +
+        '<div class="threat-info">' +
         '<div class="threat-label">' + threat.label + '</div>' +
-        '<div class="threat-hint">Toca el boton correcto!</div>';
-    el.className = 'game-threat active';
+        '<div class="threat-hint">' + threat.hint + '</div>' +
+        '</div>';
+    el.className = 'game-threat active threat-' + threat.type;
 };
 
 HuertoChallenge.prototype.hideThreat = function() {
@@ -429,13 +576,15 @@ HuertoChallenge.prototype.hideThreat = function() {
     }
 };
 
-HuertoChallenge.prototype.showActionFeedback = function(points, correct) {
+HuertoChallenge.prototype.showActionFeedback = function(points, correct, combo) {
     var el = document.getElementById('game-feedback');
     if (!el) return;
-    el.textContent = (points >= 0 ? '+' : '') + points;
+    var text = (points >= 0 ? '+' : '') + points;
+    if (combo > 1) text += ' x' + this.multiplier.toFixed(1);
+    el.textContent = text;
     el.className = 'game-feedback ' + (correct ? 'feedback-good' : 'feedback-bad');
     el.style.display = 'block';
-    setTimeout(function() { el.style.display = 'none'; }, 800);
+    setTimeout(function() { el.style.display = 'none'; }, 600);
 };
 
 HuertoChallenge.prototype.showRoundResult = function(roundScore) {
@@ -446,17 +595,19 @@ HuertoChallenge.prototype.showRoundResult = function(roundScore) {
 
     var stage = PLANT_STAGES[this.plantStage];
     var dist = this.getDistance();
+
     var msg = '<div class="game-msg">Ronda ' + (this.currentRound + 1) + ' completada!</div>';
     msg += '<div class="game-result-grid">';
-    msg += '<div class="game-result-item"><span class="game-result-label">Puntaje ronda</span><span class="game-result-val">' + roundScore + '</span></div>';
-    msg += '<div class="game-result-item"><span class="game-result-label">Total</span><span class="game-result-val">' + this.totalScore + '</span></div>';
-    msg += '<div class="game-result-item"><span class="game-result-label">Respuestas correctas</span><span class="game-result-val">' + this.correctCount + '</span></div>';
-    msg += '<div class="game-result-item"><span class="game-result-label">Planta</span><span class="game-result-val">' + stage.emoji + ' ' + stage.name + '</span></div>';
-    msg += '<div class="game-result-item"><span class="game-result-label">Distancia al optima</span><span class="game-result-val">' + dist.toFixed(1) + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Puntaje ronda</span><span class="game-result-val game-val-highlight">' + roundScore + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Total acumulado</span><span class="game-result-val">' + this.totalScore + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Correctas</span><span class="game-result-val">' + this.correctCount + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Fallidas</span><span class="game-result-val">' + this.missCount + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Max Combo</span><span class="game-result-val">' + this.maxCombo + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Planta</span><span class="game-result-val">' + stage.name + '</span></div>';
     msg += '</div>';
 
     msg += '<div class="game-sensor-result">';
-    msg += '<div class="sensor-result-item"><span>Temp</span><span>' + this.sensors.temp.toFixed(1) + '°C</span><span class="opt">(opt: 25°C)</span></div>';
+    msg += '<div class="sensor-result-item"><span>Temp</span><span>' + this.sensors.temp.toFixed(1) + '\u00B0C</span><span class="opt">(opt: 25\u00B0C)</span></div>';
     msg += '<div class="sensor-result-item"><span>HumAmb</span><span>' + this.sensors.hum_amb.toFixed(1) + '%</span><span class="opt">(opt: 65%)</span></div>';
     msg += '<div class="sensor-result-item"><span>HumSuelo</span><span>' + this.sensors.hum_suelo.toFixed(1) + '%</span><span class="opt">(opt: 60%)</span></div>';
     msg += '<div class="sensor-result-item"><span>pH</span><span>' + this.sensors.ph.toFixed(1) + '</span><span class="opt">(opt: 6.8)</span></div>';
@@ -477,17 +628,25 @@ HuertoChallenge.prototype.showFinalResult = function() {
     var el = document.getElementById('game-status');
     if (!el) return;
 
-    var self = this;
     var stage = PLANT_STAGES[this.plantStage];
     var avgScore = Math.round(this.totalScore / ROUNDS.length);
 
-    var msg = '<div class="game-msg game-msg-final">RESULTADO FINAL</div>';
+    var grade = 'F';
+    if (this.totalScore >= 3000) grade = 'S+';
+    else if (this.totalScore >= 2500) grade = 'S';
+    else if (this.totalScore >= 2000) grade = 'A';
+    else if (this.totalScore >= 1500) grade = 'B';
+    else if (this.totalScore >= 1000) grade = 'C';
+    else if (this.totalScore >= 500) grade = 'D';
+
+    var msg = '<div class="game-msg game-msg-final">RESULTADO FINAL - RANGO: ' + grade + '</div>';
     msg += '<div class="game-final-plant">' + this.getPlantSVG(this.plantStage) + '</div>';
-    msg += '<div class="game-msg-sub">Planta: ' + stage.emoji + ' ' + stage.name + '</div>';
+    msg += '<div class="game-msg-sub">' + stage.name + '</div>';
     msg += '<div class="game-result-grid">';
     msg += '<div class="game-result-item"><span class="game-result-label">Puntaje Total</span><span class="game-result-val game-final-score">' + this.totalScore + '</span></div>';
-    msg += '<div class="game-result-item"><span class="game-result-label">Promedio por Ronda</span><span class="game-result-val">' + avgScore + '</span></div>';
-    msg += '<div class="game-result-item"><span class="game-result-label">Total Correctas</span><span class="game-result-val">' + this.correctCount + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Promedio/Ronda</span><span class="game-result-val">' + avgScore + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Correctas</span><span class="game-result-val">' + this.correctCount + '</span></div>';
+    msg += '<div class="game-result-item"><span class="game-result-label">Max Combo</span><span class="game-result-val">' + this.maxCombo + '</span></div>';
     msg += '</div>';
 
     msg += '<div class="game-history">';
@@ -495,7 +654,7 @@ HuertoChallenge.prototype.showFinalResult = function() {
     this.history.forEach(function(h) {
         msg += '<div class="game-history-item">';
         msg += '<span>R' + h.round + ' ' + h.name + '</span>';
-        msg += '<span>' + h.score + ' pts</span>';
+        msg += '<span>' + h.score + ' pts | Combo: ' + h.maxCombo + '</span>';
         msg += '</div>';
     });
     msg += '</div>';
@@ -508,10 +667,6 @@ HuertoChallenge.prototype.showFinalResult = function() {
     this.loadRanking();
 };
 
-
-// ============================================================
-// SAVE SCORE TO SUPABASE VIA BRIDGE
-// ============================================================
 HuertoChallenge.prototype.saveScore = function() {
     var stage = PLANT_STAGES[this.plantStage];
     var payload = {
@@ -540,9 +695,6 @@ HuertoChallenge.prototype.getPlayerName = function() {
     return 'Jugador';
 };
 
-// ============================================================
-// LOAD RANKING FROM SUPABASE VIA BRIDGE
-// ============================================================
 HuertoChallenge.prototype.loadRanking = function() {
     var self = this;
     fetch(GAME_BRIDGE + '/api/challenge/ranking?limit=10')
@@ -559,11 +711,11 @@ HuertoChallenge.prototype.loadRanking = function() {
 
             var html = '<div class="game-history-title">Top 10 Jugadores</div>';
             ranking.forEach(function(s, i) {
-                var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i+1);
+                var medal = i === 0 ? '\uD83E\uDD47' : i === 1 ? '\uD83E\uDD48' : i === 2 ? '\uD83E\uDD49' : '#' + (i+1);
                 var stageInfo = PLANT_STAGES[s.plant_stage] || PLANT_STAGES[0];
                 html += '<div class="game-history-item">';
                 html += '<span>' + medal + ' ' + s.player_name + '</span>';
-                html += '<span>' + s.total_score + ' pts ' + stageInfo.emoji + '</span>';
+                html += '<span>' + s.total_score + ' pts</span>';
                 html += '</div>';
             });
             el.innerHTML = html;
@@ -573,4 +725,5 @@ HuertoChallenge.prototype.loadRanking = function() {
             if (el) el.innerHTML = '<div class="game-history-title">No se pudo cargar ranking</div>';
         });
 };
+
 var huertoGame = new HuertoChallenge();

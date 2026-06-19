@@ -4067,21 +4067,41 @@ body {
     font-size: 13px;
 }
 .game-sensor-row:last-child { border-bottom: none; }
-.game-sensor-val { font-weight: 700; color: var(--accent-green); font-size: 16px; }
+.game-sensor-val { font-weight: 700; color: var(--accent-green); font-size: 16px; transition: color 0.3s; }
+.game-sensor-val.sensor-ok { color: #22c55e; }
+.game-sensor-val.sensor-warning { color: #f59e0b; }
+.game-sensor-val.sensor-danger { color: #ef4444; animation: sensor-flash 0.5s ease infinite; }
 .opt-tag { color: var(--text-muted); font-size: 10px; }
+
+@keyframes sensor-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.game-combo-val { color: #f59e0b; }
+.game-combo-val:not(:empty):not(:root) { text-shadow: 0 0 8px rgba(245,158,11,0.5); }
+.game-val-highlight { color: #f59e0b !important; font-size: 20px !important; }
 
 .game-threat {
     text-align: center;
-    padding: 20px;
+    padding: 16px 20px;
     background: rgba(239,68,68,0.1);
     border: 2px solid var(--accent-red);
     border-radius: 8px;
     margin-bottom: 16px;
-    animation: threat-pulse 1s ease infinite;
+    animation: threat-pulse 0.8s ease infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
 }
-.game-threat.active { display: block; }
-.threat-icon { font-size: 48px; margin-bottom: 8px; }
-.threat-label { font-size: 16px; font-weight: 700; color: var(--accent-red); margin-bottom: 4px; }
+.game-threat.active { display: flex; }
+.game-threat.threat-frio { background: rgba(59,130,246,0.1); border-color: #3b82f6; }
+.game-threat.threat-calor, .game-threat.threat-hum_alta { background: rgba(249,115,22,0.1); border-color: #f97316; }
+.game-threat.threat-plaga { background: rgba(168,85,247,0.1); border-color: #a855f7; }
+.threat-icon { font-size: 36px; }
+.threat-info { text-align: left; }
+.threat-label { font-size: 15px; font-weight: 700; color: var(--accent-red); margin-bottom: 2px; }
 .threat-hint { font-size: 11px; color: var(--text-muted); }
 
 @keyframes threat-pulse {
