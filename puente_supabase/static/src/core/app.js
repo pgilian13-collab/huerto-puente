@@ -43,6 +43,27 @@ var App = (function() {
             EventBus.emit('maceta:selected', data);
         });
 
+        // 7. Listen for simulation alerts
+        EventBus.on('simulation:alert', function(data) {
+            var inv = AppState.get('currentInv') || 0;
+            var deviceId = inv + 1;
+            var mac = AppState.get('currentMaceta') || 1;
+            var payload = {
+                tipo_alerta: data.tipo,
+                sensor_tipo: data.sensor,
+                valor_forzado: data.valor,
+                maceta_numero: (data.sensor === 'temp' || data.sensor === 'hum_amb') ? 0 : mac,
+                dispositivo_id: deviceId
+            };
+            ApiService.bridgePost('/api/simulacion/alerta', payload).then(function(res) {
+                if (res && res.success) {
+                    console.log('[SIM] Alerta enviada: ' + data.tipo);
+                } else {
+                    console.error('[SIM] Error al enviar alerta');
+                }
+            });
+        });
+
         // 7. Init greenhouse tabs
         initInvTabs();
 

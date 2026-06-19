@@ -2,13 +2,15 @@
 // SensorService - Sensor data management
 // ============================================================
 // Fetches, caches, and provides sensor readings.
-// Handles realtime subscriptions.
+// Uses Supabase Realtime for instant updates.
 // ============================================================
 
 var SensorService = (function() {
     var pollTimer = null;
     var realtimeChannel = null;
     var POLL_MS = 5000;
+    var USE_REALTIME = true;
+    var INV_INDEX = 0;
 
     function getSensorIds(deviceId) {
         var base = (deviceId - 1) * 10;
@@ -66,22 +68,73 @@ var SensorService = (function() {
 
     function startRealtime(invIndex) {
         stopRealtime();
+        INV_INDEX = invIndex;
         var deviceId = invIndex + 1;
-        realtimeChannel = ApiService.SUPABASE_URL ? null : null; // Placeholder
-        // Realtime would use Supabase channel here
-        // Kept minimal for now - polling is sufficient
+        var ids = getSensorIds(deviceId);
+
+        if (typeof supabase === 'undefined' || !supabase.createClient) {
+            console.warn('[SensorService] Supabase JS not loaded, falling back to polling');
+            startPolling(invIndex);
+            return;
+        }
+
+        try {
+            var sbUrl = ApiService.SUPABASE_URL;
+            var sbKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56aWNkaHdvZmljenNhZmhkeG1xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDc4MTg0MywiZXhwIjoyMDk2MzU3ODQzfQ.Al5773jpjE6YiQ_hzyLVAVIzzgk0DkU8xQPMGkjXtOU';
+            var client = supabase.createClient(sbUrl, sbKey);
+
+            realtimeChannel = client
+                .channel('lecturas-realtime-' + deviceId)
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'monitoreo_lecturas'
+                }, function(payload) {
+                    var newRow = payload.new;
+                    if (newRow && ids.indexOf(newRow.sensor_id) !== -1) {
+                        var current = AppState.get('sensors') || {};
+                        current[newRow.sensor_id] = newRow;
+                        AppState.set('sensors', current);
+                        AppState.set('lastUpdate', new Date().toISOString());
+                        EventBus.emit('sensors:updated', current);
+                    }
+                })
+                .subscribe(function(status) {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('[SensorService] Realtime connected for INV-0' + deviceId);
+                    }
+                });
+        } catch (e) {
+            console.warn('[SensorService] Realtime init failed, falling back to polling:', e);
+            startPolling(invIndex);
+        }
     }
 
     function stopRealtime() {
-        realtimeChannel = null;
+        if (realtimeChannel) {
+            realtimeChannel.unsubscribe();
+            realtimeChannel = null;
+        }
     }
 
     function init(invIndex) {
+        INV_INDEX = invIndex;
         return fetchLatest(invIndex).then(function(data) {
             AppState.set('sensors', data);
             EventBus.emit('sensors:updated', data);
-            startPolling(invIndex);
+            if (USE_REALTIME) {
+                startRealtime(invIndex);
+            } else {
+                startPolling(invIndex);
+            }
         });
+    }
+
+    function switchDevice(invIndex) {
+        INV_INDEX = invIndex;
+        stopRealtime();
+        stopPolling();
+        return init(invIndex);
     }
 
     function destroy() {
@@ -99,6 +152,7 @@ var SensorService = (function() {
         stopPolling: stopPolling,
         startRealtime: startRealtime,
         stopRealtime: stopRealtime,
+        switchDevice: switchDevice,
         init: init,
         destroy: destroy
     };

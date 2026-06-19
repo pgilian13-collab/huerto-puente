@@ -20,7 +20,7 @@ var ActuatorService = (function() {
     }
 
     function toggleActuador(actuadorId, nombre, pin, estado, dispositivoId) {
-        return ApiService.sbInsert('control_actuadores', {
+        return ApiService.bridgePost('/api/comando', {
             actuador_id: actuadorId,
             dispositivo_id: dispositivoId,
             nombre_actuador: nombre,

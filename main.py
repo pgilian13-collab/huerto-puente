@@ -545,68 +545,66 @@ def _http_patch(path, timeout=8):
         gc.collect()
         return 0
 
-def enviar_lecturas(lecturas):
-    """Enviar solo sensores que cambiaron (delta)."""
+def sync_with_bridge(lecturas_db):
+    """Piggyback: send sensors AND receive commands + overrides in ONE HTTP call.
+    Replaces: enviar_lecturas + recibir_comandos + recibir_alertas + llamar_cleanup
+    = 4 HTTP calls -> 1 call.
+    """
     global last_lecturas_db, wifi_fail_count
-    delta = []
-    for l in lecturas:
-        sid = l["sensor_id"]
+
+    # Build delta (only changed sensors)
+    delta = {}
+    for l in lecturas_db:
+        sid = str(l["sensor_id"])
         val = l["valor"]
-        prev = last_lecturas_db.get(sid)
+        prev = last_lecturas_db.get(l["sensor_id"])
         if prev is None or abs(val - prev) > 0.05:
-            delta.append(l)
-            last_lecturas_db[sid] = val
+            delta[sid] = val
+            last_lecturas_db[l["sensor_id"]] = val
 
     if not delta:
         return True
 
-    payload = {"dispositivo_id": MODULE_ID, "lecturas": delta}
-    code, fail = _http_post("/api/lecturas", payload, timeout=12)
-    if fail:
-        wifi_fail_count += 1
-        print("[ENV] FAIL ({})".format(wifi_fail_count))
-        return False
-    wifi_fail_count = 0
-    print("[ENV] {} sensors -> {}".format(len(delta), code))
-    return code in (200, 201)
+    payload = {"device": MODULE_ID, "sensors": delta, "pending": True}
+    code, resp = _http_post("/api/sync", payload, timeout=10)
 
-def recibir_comandos():
-    code, data = _http_get("/api/comandos/{}".format(MODULE_ID))
-    if code != 200 or not data:
-        return []
-    comandos = data.get('comandos', [])
-    for cmd in comandos:
-        cmd_id = cmd.get('id')
-        pin_str = cmd.get('pin_conexion', '')
-        estado = cmd.get('estado_solicitado', 'OFF')
-        nombre = cmd.get('nombre_actuador', '')
-        if nombre == 'buzzer':
-            set_buzzer(800 if estado == 'ON' else 0, 10 if estado == 'ON' else 0)
+    if code == 0 or resp is None:
+        wifi_fail_count += 1
+        print("[SYNC] FAIL ({})".format(wifi_fail_count))
+        return False
+
+    wifi_fail_count = 0
+    written = resp.get("sensors_written", 0)
+    print("[SYNC] {} sensors sent, code={}".format(written, code))
+
+    # Process commands from response
+    commands = resp.get("commands", [])
+    for cmd in commands:
+        cmd_id = cmd.get("id")
+        pin_str = cmd.get("pin_conexion", "")
+        estado = cmd.get("estado_solicitado", "OFF")
+        nombre = cmd.get("nombre_actuador", "")
+        if nombre == "buzzer":
+            set_buzzer(800 if estado == "ON" else 0, 10 if estado == "ON" else 0)
         else:
             for m in range(1, 5):
                 if pin_str in RELAYS[m]:
                     set_relay(m, nombre, estado)
                     break
-        _http_patch("/api/comando/{}/ejecutado".format(cmd_id))
         print("[CMD] {} -> {}".format(nombre, estado))
-    return comandos
 
-def recibir_alertas(last_lecturas=None):
-    """Recibe alertas de simulacion activas desde Supabase via bridge."""
-    code, data = _http_get("/api/simulacion/overrides/{}".format(MODULE_ID))
-    if code != 200 or not data:
-        return []
-    alertas = data.get('overrides', [])
+    # Process overrides from response
+    overrides = resp.get("overrides", [])
     active_keys = set()
-    for alerta in alertas:
-        maceta = alerta.get('maceta_numero')
-        sensor_tipo = alerta.get('sensor_tipo')
-        valor_forzado = alerta.get('valor_forzado')
+    for alerta in overrides:
+        maceta = alerta.get("maceta_numero")
+        sensor_tipo = alerta.get("sensor_tipo")
+        valor_forzado = alerta.get("valor_forzado")
         if maceta is not None and sensor_tipo and valor_forzado is not None:
             active_keys.add((maceta, sensor_tipo))
             if not sensor_override.tiene_override(maceta, sensor_tipo):
                 valor_fisico = float(valor_forzado)
-                if last_lecturas and maceta in last_lecturas:
+                if last_lecturas.get(maceta):
                     vf = last_lecturas[maceta].get(sensor_tipo)
                     if vf is not None:
                         valor_fisico = float(vf)
@@ -615,15 +613,13 @@ def recibir_alertas(last_lecturas=None):
     for key in list(sensor_override.overrides.keys()):
         if key not in active_keys:
             sensor_override._clear_override(key[0], key[1])
-    return alertas
 
-def ejecutar_acciones_lazo(maceta, acciones):
-    for nombre, estado in acciones:
-        set_relay(maceta, nombre, estado)
-        print("[LAZO] MAC-{} {} -> {}".format(maceta, nombre, estado))
+    # Cleanup if needed
+    if resp.get("cleanup"):
+        _http_post("/api/simulacion/cleanup", {}, timeout=8)
 
-def llamar_cleanup():
-    _http_post("/api/simulacion/cleanup", {}, timeout=8)
+    return True
+
 
 def llamar_heartbeat():
     """Keep-alive para evitar que Render se duerma."""
@@ -721,8 +717,6 @@ time.sleep(2)
 oled_mac = 1
 oled_timer = 0
 last_lecturas = {}
-alertas_timer = 0
-cleanup_timer = 0
 heartbeat_timer = 0
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
@@ -782,19 +776,7 @@ while True:
         
         gc.collect()
         if wifi_ok:
-            enviado = enviar_lecturas(lecturas_db)
-            
-            recibir_comandos()
-            
-            alertas_timer += 1
-            if alertas_timer >= 3:
-                alertas_timer = 0
-                recibir_alertas(last_lecturas)
-            
-            cleanup_timer += 1
-            if cleanup_timer >= 100:
-                cleanup_timer = 0
-                llamar_cleanup()
+            sync_with_bridge(lecturas_db)
 
             heartbeat_timer += 1
             if heartbeat_timer >= 20:

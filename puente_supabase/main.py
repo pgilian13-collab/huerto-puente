@@ -131,6 +131,151 @@ async def recibir_todas_lecturas(data: dict):
     return {"status": "ok", "resultados": resultados}
 
 
+@app.post("/api/sync", dependencies=[Depends(verify_bridge_key)])
+async def sync_device(data: dict):
+    """Piggyback endpoint: ESP32 sends sensors AND receives commands + overrides in one call.
+    This replaces the need for 4 separate HTTP calls per cycle:
+    - POST /api/lecturas (write sensors)
+    - GET  /api/comandos/{id} (get pending commands)
+    - PATCH /api/comando/{id}/ejecutado (ack each command)
+    - GET  /api/simulacion/overrides/{id} (get active overrides)
+
+    Request:  {device: 1, sensors: {0: 25.3, 1: 65.1, ...}, pending: true}
+    Response: {commands: [...], overrides: [...], cleanup: bool}
+    """
+    device_id = data.get("device", data.get("dispositivo_id", 1))
+    sensors = data.get("sensors", {})
+    pending = data.get("pending", False)
+
+    results = []
+    errors = []
+
+    # 1) Write sensor readings (batch insert)
+    for sensor_id_str, valor in sensors.items():
+        try:
+            sid = int(sensor_id_str)
+            payload = {
+                "sensor_id": sid,
+                "valor_lectura": round(float(valor), 2),
+            }
+            resp = await client.post(
+                f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas",
+                json=payload,
+                headers=HEADERS_SERVICE,
+            )
+            results.append({"sensor_id": sid, "ok": resp.status_code in (200, 201)})
+        except Exception as e:
+            errors.append({"sensor_id": sensor_id_str, "error": str(e)})
+
+    # 2) Only query commands + overrides if ESP32 requests them
+    commands = []
+    overrides = []
+    cleanup_needed = False
+
+    if pending:
+        # Get pending commands
+        try:
+            resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/control_actuadores",
+                params={
+                    "dispositivo_id": f"eq.{device_id}",
+                    "estado_actual": "eq.PENDIENTE",
+                    "order": "fecha_solicitud.asc",
+                },
+                headers=HEADERS_SERVICE,
+            )
+            if resp.status_code == 200:
+                raw_cmds = resp.json()
+                for cmd in raw_cmds:
+                    cmd_id = cmd.get("id")
+                    if cmd_id:
+                        # Mark as executed immediately
+                        try:
+                            await client.patch(
+                                f"{SUPABASE_URL}/rest/v1/control_actuadores?id=eq.{cmd_id}",
+                                json={
+                                    "estado_actual": "EJECUTADO",
+                                    "fecha_ejecucion": datetime.now(timezone.utc).isoformat(),
+                                },
+                                headers=HEADERS_SERVICE,
+                            )
+                        except Exception:
+                            pass
+                    commands.append(cmd)
+        except Exception:
+            pass
+
+        # Get active overrides
+        try:
+            resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/simulacion_alertas",
+                params={
+                    "dispositivo_id": f"eq.{device_id}",
+                    "activa": "eq.true",
+                    "order": "created_at.desc",
+                    "limit": "10",
+                },
+                headers=HEADERS_SERVICE,
+            )
+            if resp.status_code == 200:
+                overrides = resp.json()
+                # Check if any override is older than 5 minutes
+                now = datetime.now(timezone.utc)
+                for o in overrides:
+                    created = o.get("created_at", "")
+                    if created:
+                        try:
+                            dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                            if (now - dt).total_seconds() > 300:
+                                cleanup_needed = True
+                                break
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+    return {
+        "ok": len(errors) == 0,
+        "sensors_written": len(results),
+        "sensors_ok": sum(1 for r in results if r.get("ok")),
+        "sensors_failed": sum(1 for r in results if not r.get("ok")),
+        "errors": errors,
+        "commands": commands,
+        "overrides": overrides,
+        "cleanup": cleanup_needed,
+    }
+
+
+@app.post("/api/comando")
+async def recibir_comando_frontend(data: dict):
+    """Recibe comandos del frontend y los guarda en Supabase.
+    El ESP32 los recibe via /api/sync (piggyback).
+    """
+    try:
+        payload = {
+            "actuador_id": data.get("actuador_id"),
+            "dispositivo_id": data.get("dispositivo_id"),
+            "nombre_actuador": data.get("nombre_actuador"),
+            "pin_conexion": data.get("pin_conexion"),
+            "estado_solicitado": data.get("estado_solicitado"),
+            "estado_actual": "PENDIENTE",
+            "fecha_solicitud": datetime.now(timezone.utc).isoformat(),
+        }
+        resp = await client.post(
+            f"{SUPABASE_URL}/rest/v1/control_actuadores",
+            json=payload,
+            headers=HEADERS_SERVICE,
+        )
+        if resp.status_code in (200, 201):
+            return {"success": True, "id": resp.json().get("id")}
+        else:
+            raise HTTPException(502, f"Supabase {resp.status_code}: {resp.text[:300]}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @app.get("/api/comandos/{dispositivo_id}")
 async def obtener_comandos(dispositivo_id: int):
     """Obtiene comandos pendientes para un ESP32"""

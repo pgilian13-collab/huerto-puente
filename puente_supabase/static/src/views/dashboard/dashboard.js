@@ -3,18 +3,16 @@
 // ============================================================
 
 var DashboardModule = (function() {
-    var pollTimer = null;
-
     function init() {
         render();
         loadData();
-        startPolling();
         EventBus.on('sensors:updated', onSensorsUpdated);
+        EventBus.on('maceta:selected', onMacetaChanged);
     }
 
     function destroy() {
-        stopPolling();
         EventBus.off('sensors:updated', onSensorsUpdated);
+        EventBus.off('maceta:selected', onMacetaChanged);
     }
 
     function render() {
@@ -143,19 +141,12 @@ var DashboardModule = (function() {
         ActuatorService.fetchActuadores(inv);
     }
 
-    function startPolling() {
-        stopPolling();
-        pollTimer = setInterval(function() {
-            var inv = AppState.get('currentInv') || 0;
-            SensorService.fetchLatest(inv).then(updateSensors);
-        }, 5000);
-    }
-
-    function stopPolling() {
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    }
-
     function onSensorsUpdated(data) {
+        updateSensors(data);
+    }
+
+    function onMacetaChanged() {
+        var data = AppState.get('sensors') || {};
         updateSensors(data);
     }
 
