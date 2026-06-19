@@ -3847,6 +3847,40 @@ body {
 }
 
 /* ============================================================
+   DESKTOP SIDEBAR — ALWAYS VISIBLE
+   ============================================================ */
+@media (min-width: 769px) {
+    .sidebar {
+        left: 0;
+        border-right: 2px solid #333;
+    }
+    .sidebar-overlay {
+        display: none !important;
+    }
+    .sidebar-close {
+        display: none;
+    }
+    .main-content {
+        margin-left: 280px;
+    }
+    .header {
+        left: 280px;
+    }
+    .inv-tabs {
+        left: 280px;
+    }
+    .maceta-nav {
+        left: 280px;
+    }
+    .app-footer {
+        margin-left: 280px;
+    }
+    .fab-config {
+        right: 24px;
+    }
+}
+
+/* ============================================================
    LOGIN PAGE
    ============================================================ */
 .login-body { overflow: hidden; }
