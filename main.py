@@ -289,7 +289,7 @@ def connect_wifi():
         return True
     
     print("[WiFi] '{}'...".format(WIFI_SSID))
-    wlan.connect(WIFI_SSID, WIFI_PASS, 6)
+    wlan.connect(WIFI_SSID, WIFI_PASS)
     
     timeout = 15
     while not wlan.isconnected() and timeout > 0:
