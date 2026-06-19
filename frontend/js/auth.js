@@ -77,7 +77,7 @@ function handleLogout() {
 }
 
 (function() {
-    if (isLoggedIn()) {
-        window.location.href = 'index.html';
+    if (isLoggedIn() && window.location.pathname === '/login') {
+        window.location.href = '/';
     }
 })();
