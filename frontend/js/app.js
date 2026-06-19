@@ -118,7 +118,7 @@ function iniciarRealtime() {
         const sid = lectura.sensor_id;
         const val = parseFloat(lectura.valor_lectura);
 
-        const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
+        const ids = CONFIG.getTodosSensoresMaceta(dispositivoId, currentMaceta);
         const expectedIds = [ids.temp, ids.hum_amb, ids.hum_suelo, ids.ph];
 
         if (!expectedIds.includes(sid)) return;
@@ -172,7 +172,7 @@ function selectInvernadero(index) {
 async function cargarDatos() {
     try {
         const dispositivoId = currentInv + 1;
-        const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
+        const ids = CONFIG.getTodosSensoresMaceta(dispositivoId, currentMaceta);
 
         const lecturas = await SupabaseClient.query('monitoreo_lecturas',
             `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=16`
@@ -466,7 +466,7 @@ function initChart() {
 async function cargarHistorico() {
     try {
         const dispositivoId = currentInv + 1;
-        const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
+        const ids = CONFIG.getTodosSensoresMaceta(dispositivoId, currentMaceta);
 
         const lecturas = await SupabaseClient.query('monitoreo_lecturas',
             `sensor_id=in.(${ids.temp},${ids.hum_amb},${ids.hum_suelo},${ids.ph})&order=fecha_hora.desc&limit=${CONFIG.CHART_POINTS}`
@@ -629,7 +629,7 @@ function getSensorEstado(valor, tipo) {
 async function abrirSensorModal(tipo) {
     const cfg = SENSOR_CONFIG[tipo];
     const dispositivoId = currentInv + 1;
-    const ids = CONFIG.getSensoresMaceta(dispositivoId, currentMaceta);
+    const ids = CONFIG.getTodosSensoresMaceta(dispositivoId, currentMaceta);
     const sensorId = ids[cfg.key];
 
     document.getElementById('sensorModalIcon').textContent = cfg.icon;
@@ -778,14 +778,14 @@ const PHASE_RECOVER_MS = 60000;
 
 const SIM_INPUT_MAP = {
     'sequia': 'val-sequia',
-    'ph_bajo': 'val-phbajo',
-    'ph_alto': 'val-phalto',
-    'temp_alta': 'val-phalt',
-    'hum_baja': 'val-humbaja'
+    'ph': 'val-ph',
+    'temp': 'val-temp',
+    'hum_amb': 'val-hum'
 };
 
 async function enviarAlerta(tipoAlerta, sensorTipo) {
-    const maceta = currentMaceta;
+    const esCompartido = (sensorTipo === 'temp' || sensorTipo === 'hum_amb');
+    const maceta = esCompartido ? 0 : currentMaceta;
     const dispositivoId = currentInv + 1;
     
     const inputEl = document.getElementById(SIM_INPUT_MAP[tipoAlerta]);
@@ -827,10 +827,9 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
     
     const labels = {
         'sequia': 'SEQUIA - Humedad Suelo',
-        'ph_bajo': 'pH BAJO',
-        'ph_alto': 'pH ALTO',
-        'temp_alta': 'TEMPERATURA ALTA',
-        'hum_baja': 'HUMEDAD AMBIENTE BAJA'
+        'ph': 'pH SUELO',
+        'temp': 'TEMPERATURA COMPARTIDA',
+        'hum_amb': 'HUMEDAD AMBIENTE COMPARTIDA'
     };
     
     infoSpan.textContent = `${labels[tipoAlerta]} -> ${valorForzado}`;
@@ -838,10 +837,9 @@ function mostrarOverrideStatus(tipoAlerta, sensorTipo, valorForzado) {
     
     const btnMap = {
         'sequia': 'btn-sim-sequia',
-        'ph_bajo': 'btn-sim-phbajo',
-        'ph_alto': 'btn-sim-phalto',
-        'temp_alta': 'btn-sim-phalt',
-        'hum_baja': 'btn-sim-humbaja'
+        'ph': 'btn-sim-ph',
+        'temp': 'btn-sim-temp',
+        'hum_amb': 'btn-sim-hum'
     };
     
     const btn = document.getElementById(btnMap[tipoAlerta]);

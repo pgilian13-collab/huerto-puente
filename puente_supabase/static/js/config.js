@@ -1,8 +1,20 @@
 /**
  * CONFIGURACION DEL PROYECTO
  * ==========================
- * 5 Invernaderos x 4 Macetas x 4 Sensores = 100 Sensores
+ * 5 Invernaderos x (2 compartidos + 4 Macetas x 2) = 50 Sensores
  * 5 Invernaderos x (4 Macetas x 3 Actuadores + 1 Buzzer) = 65 Actuadores
+ *
+ * Layout por invernadero (10 IDs):
+ *   +0: temp (compartido)
+ *   +1: hum_amb (compartido)
+ *   +2: hum_suelo MAC-1
+ *   +3: ph MAC-1
+ *   +4: hum_suelo MAC-2
+ *   +5: ph MAC-2
+ *   +6: hum_suelo MAC-3
+ *   +7: ph MAC-3
+ *   +8: hum_suelo MAC-4
+ *   +9: ph MAC-4
  */
 
 const CONFIG = {
@@ -19,31 +31,50 @@ const CONFIG = {
     ],
 
     MACETAS_POR_INV: 4,
-    SENSORES_POR_MACETA: 4,
-    TIPOS_SENSOR: { temp: 1, hum_amb: 2, hum_suelo: 3, ph: 4 },
+    SENSORES_COMPARTIDOS: 2,
+    SENSORES_POR_MACETA: 2,
+    SENSORES_POR_DISP: 10,
 
-    getSensorId(dispositivoId, macetaNum, tipo) {
-        return (dispositivoId - 1) * 16 + (macetaNum - 1) * 4 + tipo;
+    getSensoresCompartidos(deviceId) {
+        const base = (deviceId - 1) * 10;
+        return { temp: base + 0, hum_amb: base + 1 };
     },
 
-    getSensoresMaceta(dispositivoId, macetaNum) {
+    getSensoresMaceta(deviceId, macetaNum) {
+        const base = (deviceId - 1) * 10 + 2 + (macetaNum - 1) * 2;
+        return { hum_suelo: base, ph: base + 1 };
+    },
+
+    getTodosSensoresMaceta(deviceId, macetaNum) {
+        const shared = this.getSensoresCompartidos(deviceId);
+        const mac = this.getSensoresMaceta(deviceId, macetaNum);
         return {
-            temp:     this.getSensorId(dispositivoId, macetaNum, 1),
-            hum_amb:  this.getSensorId(dispositivoId, macetaNum, 2),
-            hum_suelo:this.getSensorId(dispositivoId, macetaNum, 3),
-            ph:       this.getSensorId(dispositivoId, macetaNum, 4),
+            temp: shared.temp,
+            hum_amb: shared.hum_amb,
+            hum_suelo: mac.hum_suelo,
+            ph: mac.ph,
         };
     },
 
     getSensoresDispositivo(dispositivoId) {
+        const shared = this.getSensoresCompartidos(dispositivoId);
         const sensores = [];
         for (let m = 1; m <= this.MACETAS_POR_INV; m++) {
-            sensores.push({
-                maceta: m,
-                ...this.getSensoresMaceta(dispositivoId, m),
-            });
+            const mac = this.getSensoresMaceta(dispositivoId, m);
+            sensores.push({ maceta: m, ...shared, ...mac });
         }
         return sensores;
+    },
+
+    getAllSensorIds(deviceId) {
+        const ids = [];
+        const shared = this.getSensoresCompartidos(deviceId);
+        ids.push(shared.temp, shared.hum_amb);
+        for (let m = 1; m <= this.MACETAS_POR_INV; m++) {
+            const mac = this.getSensoresMaceta(deviceId, m);
+            ids.push(mac.hum_suelo, mac.ph);
+        }
+        return ids;
     },
 
     getActuadorId(dispositivoId, macetaNum, tipo) {

@@ -40,38 +40,37 @@ MODULOS = {
 # ============================================================
 
 def generar_lecturas(modulo_id):
-    """Genera 16 lecturas (4 macetas x 4 sensores) con variacion realista"""
+    """Genera 10 lecturas (2 compartidos + 4 macetas x 2 sensores) con variacion realista"""
     base = MODULOS[modulo_id]
     lecturas = []
     tz = timezone(timedelta(hours=-5))  # Peru UTC-5
     ahora = datetime.now(tz)
 
-    for mac in range(1, 5):
-        base_id = (modulo_id - 1) * 16 + (mac - 1) * 4
+    base_shared = (modulo_id - 1) * 10
 
-        # Variacion por maceta (cada maceta tiene micro-clima diferente)
+    # Sensores compartidos (1 solo valor para todo el invernadero)
+    temp = base["temp"] + random.uniform(-1.5, 1.5)
+    temp = round(max(10.0, min(45.0, temp)), 1)
+
+    hum_amb = base["humAmb"] + random.uniform(-3.0, 3.0)
+    hum_amb = round(max(15.0, min(95.0, hum_amb)), 1)
+
+    lecturas.append({"sensor_id": base_shared, "valor": temp})
+    lecturas.append({"sensor_id": base_shared + 1, "valor": hum_amb})
+
+    for mac in range(1, 5):
+        base_mac = base_shared + 2 + (mac - 1) * 2
+
         factor_mac = (mac - 1) * 0.5
 
-        # Temperatura: base + variacion maceta + ruido
-        temp = base["temp"] + factor_mac + random.uniform(-1.5, 1.5)
-        temp = round(max(10.0, min(45.0, temp)), 1)
-
-        # Humedad ambiente: inversamente proporcional a temperatura
-        hum_amb = base["humAmb"] - factor_mac + random.uniform(-3.0, 3.0)
-        hum_amb = round(max(15.0, min(95.0, hum_amb)), 1)
-
-        # Humedad suelo: variacion por maceta + ruido
         hum_suelo = base["humSuelo"] + factor_mac + random.uniform(-5.0, 5.0)
         hum_suelo = round(max(0.0, min(100.0, hum_suelo)), 1)
 
-        # pH: estable con pequena variacion
         ph = base["ph"] + (factor_mac * 0.1) + random.uniform(-0.3, 0.3)
         ph = round(max(3.0, min(11.0, ph)), 2)
 
-        lecturas.append({"sensor_id": base_id + 1, "valor": temp})
-        lecturas.append({"sensor_id": base_id + 2, "valor": hum_amb})
-        lecturas.append({"sensor_id": base_id + 3, "valor": hum_suelo})
-        lecturas.append({"sensor_id": base_id + 4, "valor": ph})
+        lecturas.append({"sensor_id": base_mac, "valor": hum_suelo})
+        lecturas.append({"sensor_id": base_mac + 1, "valor": ph})
 
     return lecturas
 
@@ -147,10 +146,10 @@ if __name__ == "__main__":
             lecturas = generar_lecturas(MODULE_ID)
 
             # Mostrar resumen
-            temp_avg = sum(l["valor"] for l in lecturas if l["sensor_id"] % 4 == 1) / 4
-            hum_avg = sum(l["valor"] for l in lecturas if l["sensor_id"] % 4 == 3) / 4
+            temp_val = lecturas[0]["valor"]
+            hum_suelo_avg = sum(l["valor"] for i, l in enumerate(lecturas) if i >= 2 and i % 2 == 0) / 4
             print("[DATOS] Temp: {:.1f}C | HumSuelo: {:.1f}% | {} lecturas".format(
-                temp_avg, hum_avg, len(lecturas)))
+                temp_val, hum_suelo_avg, len(lecturas)))
 
             if enviar Datos(MODULE_ID, lecturas):
                 envios_ok += 1

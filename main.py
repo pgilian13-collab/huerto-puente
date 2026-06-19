@@ -316,10 +316,9 @@ MUX_S3 = Pin(18, Pin.OUT)
 MUX_SIG = ADC(Pin(34))
 MUX_SIG.atten(ADC.ATTN_11DB)
 
-# DHT22 - 1 por maceta
-# dht1=GPIO4, dht2=GPIO19, dht3=GPIO2, dht4=GPIO13 (segun diagrama Wokwi)
-DHT_PINS = [Pin(4), Pin(19), Pin(2), Pin(13)]
-dht_sensors = [dht.DHT22(p) for p in DHT_PINS]
+# DHT22 - 1 compartido para todo el invernadero
+DHT_PIN = Pin(4)
+dht_sensor = dht.DHT22(DHT_PIN)
 
 # Relays - 3 por maceta + buzzer
 # NOTA: GPIO13 se usa para DHT22 MAC-4, bomba MAC-1 usa GPIO32
@@ -426,17 +425,18 @@ def leer_ph(maceta):
     ph = (4.2 - vph) / 0.3
     return max(0.0, min(round(ph, 2), 14.0))
 
-def leer_dht(maceta):
+def leer_dht():
     for _ in range(3):
         try:
-            dht_sensors[maceta - 1].measure()
-            t = dht_sensors[maceta - 1].temperature()
-            h = dht_sensors[maceta - 1].humidity()
+            dht_sensor.measure()
+            t = dht_sensor.temperature()
+            h = dht_sensor.humidity()
             if t is not None and h is not None:
                 return t, h
         except:
             pass
         time.sleep_ms(200)
+    return 25.0, 65.0
     return None, None
 
 # ============================================================
@@ -602,7 +602,7 @@ def recibir_alertas(last_lecturas=None):
         maceta = alerta.get('maceta_numero')
         sensor_tipo = alerta.get('sensor_tipo')
         valor_forzado = alerta.get('valor_forzado')
-        if maceta and sensor_tipo and valor_forzado is not None:
+        if maceta is not None and sensor_tipo and valor_forzado is not None:
             active_keys.add((maceta, sensor_tipo))
             if not sensor_override.tiene_override(maceta, sensor_tipo):
                 valor_fisico = float(valor_forzado)
@@ -733,21 +733,26 @@ while True:
         gc.collect()
         lecturas_db = []
 
+        temp_fisico, hum_amb_fisico = leer_dht()
+        temp = sensor_override.get_valor(0, 'temp', temp_fisico)
+        hum_amb = sensor_override.get_valor(0, 'hum_amb', hum_amb_fisico)
+
+        base_shared = (MODULE_ID - 1) * 10
+        lecturas_db.append({"sensor_id": base_shared, "valor": temp})
+        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb})
+
+        last_lecturas[0] = {'temp': temp, 'hum_amb': hum_amb}
+
         for m in range(1, 5):
-            temp_fisico, hum_amb_fisico = leer_dht(m)
             hum_suelo_fisico = leer_suelo(m)
             ph_fisico = leer_ph(m)
             
-            temp = sensor_override.get_valor(m, 'temp', temp_fisico)
-            hum_amb = sensor_override.get_valor(m, 'hum_amb', hum_amb_fisico)
             hum_suelo = sensor_override.get_valor(m, 'hum_suelo', hum_suelo_fisico)
             ph = sensor_override.get_valor(m, 'ph', ph_fisico)
             
-            base_id = (MODULE_ID - 1) * 16 + (m - 1) * 4
-            lecturas_db.append({"sensor_id": base_id + 1, "valor": temp})
-            lecturas_db.append({"sensor_id": base_id + 2, "valor": hum_amb})
-            lecturas_db.append({"sensor_id": base_id + 3, "valor": hum_suelo})
-            lecturas_db.append({"sensor_id": base_id + 4, "valor": ph})
+            base_mac = base_shared + 2 + (m - 1) * 2
+            lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo})
+            lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph})
 
             last_lecturas[m] = {
                 'temp': temp, 'hum_amb': hum_amb,
@@ -760,12 +765,12 @@ while True:
             if acciones:
                 ejecutar_acciones_lazo(m, acciones)
 
-            override_activo = (sensor_override.tiene_override(m, 'temp') or
-                             sensor_override.tiene_override(m, 'hum_amb') or
-                             sensor_override.tiene_override(m, 'hum_suelo') or
+            override_activo = (sensor_override.tiene_override(m, 'hum_suelo') or
                              sensor_override.tiene_override(m, 'ph'))
+            override_shared = (sensor_override.tiene_override(0, 'temp') or
+                             sensor_override.tiene_override(0, 'hum_amb'))
             
-            if override_activo:
+            if override_activo or override_shared:
                 print("MAC-{} [OVR] T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
             else:
                 print("MAC-{} T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))

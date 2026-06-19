@@ -482,43 +482,33 @@
                         <span class="sim-unit">%</span>
                     </div>
                 </div>
-                <div class="sim-card sim-ph-bajo">
-                    <button class="brutalist-btn sim-btn" id="btn-sim-phbajo" onclick="enviarAlerta('ph_bajo', 'ph')">
+                <div class="sim-card sim-ph">
+                    <button class="brutalist-btn sim-btn" id="btn-sim-ph" onclick="enviarAlerta('ph', 'ph')">
                         <span class="material-icons-round">science</span>
-                        <span class="btn-label">pH BAJO</span>
+                        <span class="btn-label">pH</span>
                     </button>
                     <div class="sim-input-wrap">
-                        <input type="number" class="sim-input" id="val-phbajo" value="4.5" min="0" max="14" step="0.1">
+                        <input type="number" class="sim-input" id="val-ph" value="4.5" min="0" max="14" step="0.1">
                         <span class="sim-unit">pH</span>
                     </div>
                 </div>
-                <div class="sim-card sim-ph-alto">
-                    <button class="brutalist-btn sim-btn" id="btn-sim-phalto" onclick="enviarAlerta('ph_alto', 'ph')">
-                        <span class="material-icons-round">science</span>
-                        <span class="btn-label">pH ALTO</span>
-                    </button>
-                    <div class="sim-input-wrap">
-                        <input type="number" class="sim-input" id="val-phalto" value="9.0" min="0" max="14" step="0.1">
-                        <span class="sim-unit">pH</span>
-                    </div>
-                </div>
-                <div class="sim-card sim-temp-alta">
-                    <button class="brutalist-btn sim-btn" id="btn-sim-phalt" onclick="enviarAlerta('temp_alta', 'temp')">
+                <div class="sim-card sim-temp">
+                    <button class="brutalist-btn sim-btn" id="btn-sim-temp" onclick="enviarAlerta('temp', 'temp')">
                         <span class="material-icons-round">thermostat</span>
-                        <span class="btn-label">TEMP ALTA</span>
+                        <span class="btn-label">TEMP</span>
                     </button>
                     <div class="sim-input-wrap">
-                        <input type="number" class="sim-input" id="val-phalt" value="45.0" min="-10" max="60" step="0.1">
+                        <input type="number" class="sim-input" id="val-temp" value="45.0" min="-10" max="60" step="0.1">
                         <span class="sim-unit">°C</span>
                     </div>
                 </div>
-                <div class="sim-card sim-hum-baja">
-                    <button class="brutalist-btn sim-btn" id="btn-sim-humbaja" onclick="enviarAlerta('hum_baja', 'hum_amb')">
+                <div class="sim-card sim-hum">
+                    <button class="brutalist-btn sim-btn" id="btn-sim-hum" onclick="enviarAlerta('hum_amb', 'hum_amb')">
                         <span class="material-icons-round">air</span>
-                        <span class="btn-label">HUM BAJA</span>
+                        <span class="btn-label">HUMEDAD</span>
                     </button>
                     <div class="sim-input-wrap">
-                        <input type="number" class="sim-input" id="val-humbaja" value="20.0" min="0" max="100" step="0.1">
+                        <input type="number" class="sim-input" id="val-hum" value="20.0" min="0" max="100" step="0.1">
                         <span class="sim-unit">%</span>
                     </div>
                 </div>
@@ -689,10 +679,9 @@
                 <div class="sim-description"><span class="material-icons-round">info</span> Envie alertas de simulacion al ESP32.</div>
                 <div class="alert-buttons">
                     <div class="sim-card sim-sequia"><button class="brutalist-btn sim-btn" id="btn-sim-sequia" onclick="enviarAlerta('sequia', 'hum_suelo')"><span class="material-icons-round">water_drop</span><span class="btn-label">SEQUIA</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-sequia" value="15.0" min="0" max="100" step="0.1"><span class="sim-unit">%</span></div></div>
-                    <div class="sim-card sim-ph-bajo"><button class="brutalist-btn sim-btn" id="btn-sim-phbajo" onclick="enviarAlerta('ph_bajo', 'ph')"><span class="material-icons-round">science</span><span class="btn-label">pH BAJO</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-phbajo" value="4.5" min="0" max="14" step="0.1"><span class="sim-unit">pH</span></div></div>
-                    <div class="sim-card sim-ph-alto"><button class="brutalist-btn sim-btn" id="btn-sim-phalto" onclick="enviarAlerta('ph_alto', 'ph')"><span class="material-icons-round">science</span><span class="btn-label">pH ALTO</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-phalto" value="9.0" min="0" max="14" step="0.1"><span class="sim-unit">pH</span></div></div>
-                    <div class="sim-card sim-temp-alta"><button class="brutalist-btn sim-btn" id="btn-sim-phalt" onclick="enviarAlerta('temp_alta', 'temp')"><span class="material-icons-round">thermostat</span><span class="btn-label">TEMP ALTA</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-phalt" value="45.0" min="-10" max="60" step="0.1"><span class="sim-unit">C</span></div></div>
-                    <div class="sim-card sim-hum-baja"><button class="brutalist-btn sim-btn" id="btn-sim-humbaja" onclick="enviarAlerta('hum_baja', 'hum_amb')"><span class="material-icons-round">air</span><span class="btn-label">HUM BAJA</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-humbaja" value="20.0" min="0" max="100" step="0.1"><span class="sim-unit">%</span></div></div>
+                    <div class="sim-card sim-ph"><button class="brutalist-btn sim-btn" id="btn-sim-ph" onclick="enviarAlerta('ph', 'ph')"><span class="material-icons-round">science</span><span class="btn-label">pH</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-ph" value="4.5" min="0" max="14" step="0.1"><span class="sim-unit">pH</span></div></div>
+                    <div class="sim-card sim-temp"><button class="brutalist-btn sim-btn" id="btn-sim-temp" onclick="enviarAlerta('temp', 'temp')"><span class="material-icons-round">thermostat</span><span class="btn-label">TEMP</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-temp" value="45.0" min="-10" max="60" step="0.1"><span class="sim-unit">C</span></div></div>
+                    <div class="sim-card sim-hum"><button class="brutalist-btn sim-btn" id="btn-sim-hum" onclick="enviarAlerta('hum_amb', 'hum_amb')"><span class="material-icons-round">air</span><span class="btn-label">HUMEDAD</span></button><div class="sim-input-wrap"><input type="number" class="sim-input" id="val-hum" value="20.0" min="0" max="100" step="0.1"><span class="sim-unit">%</span></div></div>
                 </div>
                 <div id="overrideStatus" class="override-status" style="display:none;">
                     <span class="material-icons-round">warning</span><span>OVERRIDE: </span><span id="overrideInfo"></span>

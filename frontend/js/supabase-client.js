@@ -113,12 +113,7 @@ const SupabaseClient = {
 
     async getLecturas(invIndex, limit = 50) {
         const dispositivoId = invIndex + 1;
-        const ids = [];
-        for (let m = 1; m <= CONFIG.MACETAS_POR_INV; m++) {
-            for (let t = 1; t <= CONFIG.SENSORES_POR_MACETA; t++) {
-                ids.push(CONFIG.getSensorId(dispositivoId, m, t));
-            }
-        }
+        const ids = CONFIG.getAllSensorIds(dispositivoId);
         return this.query('monitoreo_lecturas',
             `sensor_id=in.(${ids.join(',')})&order=fecha_hora.desc&limit=${limit}`
         );
@@ -126,10 +121,7 @@ const SupabaseClient = {
 
     async getLecturasMaceta(invIndex, macetaNum, limit = 50) {
         const dispositivoId = invIndex + 1;
-        const ids = [];
-        for (let t = 1; t <= CONFIG.SENSORES_POR_MACETA; t++) {
-            ids.push(CONFIG.getSensorId(dispositivoId, macetaNum, t));
-        }
+        const ids = CONFIG.getAllSensorIds(dispositivoId);
         return this.query('monitoreo_lecturas',
             `sensor_id=in.(${ids.join(',')})&order=fecha_hora.desc&limit=${limit}`
         );
