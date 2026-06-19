@@ -20,6 +20,8 @@ let historicoTimer = null;
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('[APP] Iniciando Huerto Inteligente...');
 
+    initSidebar();
+
     const connected = await SupabaseClient.healthCheck();
     const dot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
