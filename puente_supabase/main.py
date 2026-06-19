@@ -421,6 +421,11 @@ async def root():
     return FileResponse("static/index.html")
 
 
+@app.get("/index.html")
+async def index_html():
+    return FileResponse("static/index.html")
+
+
 @app.get("/login")
 async def login_page():
     return FileResponse("static/login.html")
