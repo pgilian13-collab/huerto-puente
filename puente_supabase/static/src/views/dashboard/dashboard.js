@@ -195,6 +195,7 @@ var DashboardModule = (function() {
     function onMacetaChanged() {
         var data = AppState.get('sensors') || {};
         updateSensors(data);
+        loadChartData();
     }
 
     function updateSensors(data) {
@@ -233,10 +234,17 @@ var DashboardModule = (function() {
             return;
         }
 
-        var sensorNames = { temp: 'Temperatura', hum_amb: 'Humedad Amb', hum_suelo: 'Hum Suelo', ph: 'pH' };
-        var colors = { temp: '#ef4444', hum_amb: '#3b82f6', hum_suelo: '#22c55e', ph: '#f59e0b' };
         var inv = AppState.get('currentInv') || 0;
-        var ids = SensorService.getSensorIds(inv + 1);
+        var mac = AppState.get('currentMaceta') || 1;
+        var shared = SensorService.getSharedSensorIds(inv + 1);
+        var macetaIds = SensorService.getMacetaSensorIds(inv + 1, mac);
+
+        var sensorConfig = [
+            { id: shared.temp, name: 'Temperatura', color: '#ef4444' },
+            { id: shared.hum_amb, name: 'Humedad Amb', color: '#3b82f6' },
+            { id: macetaIds.hum_suelo, name: 'Hum Suelo MAC-' + mac, color: '#22c55e' },
+            { id: macetaIds.ph, name: 'pH MAC-' + mac, color: '#f59e0b' }
+        ];
 
         var bySensor = {};
         rows.forEach(function(r) {
@@ -245,18 +253,16 @@ var DashboardModule = (function() {
         });
 
         var datasets = [];
-        var typeMap = { 0: 'temp', 1: 'hum_amb', 2: 'hum_suelo', 3: 'ph', 4: 'hum_suelo', 5: 'ph', 6: 'hum_suelo', 7: 'ph', 8: 'hum_suelo', 9: 'ph' };
-
-        ids.forEach(function(id, i) {
-            var key = typeMap[i];
-            if (bySensor[id]) {
+        sensorConfig.forEach(function(cfg) {
+            if (bySensor[cfg.id]) {
                 datasets.push({
-                    label: sensorNames[key] + (i > 1 ? ' M' + Math.ceil((i - 1) / 2) : ''),
-                    data: bySensor[id].reverse(),
-                    borderColor: colors[key],
-                    backgroundColor: colors[key] + '20',
+                    label: cfg.name,
+                    data: bySensor[cfg.id].reverse(),
+                    borderColor: cfg.color,
+                    backgroundColor: cfg.color + '20',
                     tension: 0.3,
-                    pointRadius: 1
+                    pointRadius: 1,
+                    fill: true
                 });
             }
         });
@@ -266,8 +272,14 @@ var DashboardModule = (function() {
             data: { datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                scales: { x: { type: 'time', time: { unit: 'hour' }, grid: { color: '#1e1e1e' }, ticks: { color: '#666' } }, y: { grid: { color: '#1e1e1e' }, ticks: { color: '#666' } } },
-                plugins: { legend: { labels: { color: '#ccc', font: { family: 'JetBrains Mono', size: 11 } } } }
+                scales: {
+                    x: { type: 'time', time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } }, grid: { color: '#1e1e1e' }, ticks: { color: '#666', font: { family: 'JetBrains Mono', size: 10 } } },
+                    y: { grid: { color: '#1e1e1e' }, ticks: { color: '#666', font: { family: 'JetBrains Mono', size: 10 } } }
+                },
+                plugins: {
+                    legend: { labels: { color: '#ccc', font: { family: 'JetBrains Mono', size: 11 }, usePointStyle: true, pointStyle: 'line' } },
+                    tooltip: { backgroundColor: '#1a1a1a', titleColor: '#ccc', bodyColor: '#aaa', borderColor: '#333', borderWidth: 1, titleFont: { family: 'JetBrains Mono' }, bodyFont: { family: 'JetBrains Mono' } }
+                }
             }
         });
     }
