@@ -220,13 +220,18 @@ var DashboardModule = (function() {
     }
 
     function initChart() {
-        loadChartData();
+        setTimeout(loadChartData, 100);
     }
 
     function renderChart(rows) {
         var canvas = document.getElementById('chartHistorico');
         if (!canvas) return;
         if (chart) chart.destroy();
+
+        if (!rows || rows.length === 0) {
+            canvas.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#64748b;font-family:JetBrains Mono;font-size:12px;letter-spacing:1px;">SIN DATOS HISTORICOS</div>';
+            return;
+        }
 
         var sensorNames = { temp: 'Temperatura', hum_amb: 'Humedad Amb', hum_suelo: 'Hum Suelo', ph: 'pH' };
         var colors = { temp: '#ef4444', hum_amb: '#3b82f6', hum_suelo: '#22c55e', ph: '#f59e0b' };

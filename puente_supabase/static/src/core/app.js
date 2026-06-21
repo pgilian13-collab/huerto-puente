@@ -135,14 +135,6 @@ var App = (function() {
         });
 
         // graficos and config are now part of dashboard
-        Router.register('graficos', {
-            load: function(done) { Router.navigate('dashboard'); }
-        });
-
-        Router.register('config', {
-            load: function(done) { Router.navigate('dashboard'); }
-        });
-
         Router.register('reportes', {
             load: function(done) {
                 ModuleLoader.loadBundle(
@@ -183,7 +175,7 @@ var App = (function() {
                 this.classList.add('active');
                 EventBus.emit('device:changed', { index: idx, id: idx + 1 });
             });
-        }
+        });
     }
 
     function updateStatus(online) {
