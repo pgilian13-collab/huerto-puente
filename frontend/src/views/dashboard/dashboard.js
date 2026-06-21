@@ -414,7 +414,7 @@ var OverrideManager = (function() {
         ph:        { icon: 'science',    label: 'pH Suelo',    unit: 'pH', shared: false }
     };
 
-    var PHASE_DURATIONS = { degrade: 21000, hold: 2000, recover: 60000 };
+    var PHASE_DURATIONS = { degrade: 21000, hold: 2000, recover: 10000 };
     var TOTAL_CYCLE = PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold + PHASE_DURATIONS.recover;
 
     var ACTUATOR_MAP = {
@@ -522,7 +522,7 @@ var OverrideManager = (function() {
 
         overrides.forEach(function(o) {
             var phase = getPhase(o);
-            if (phase === 'waiting' || phase === 'degrading' || phase === 'holding' || phase === 'recovering') {
+            if (phase === 'recovering') {
                 var actName = ACTUATOR_MAP[o.sensor];
                 if (actName) actuadores[actName] = true;
             }
