@@ -78,12 +78,8 @@ var DashboardModule = (function() {
 
         html += '</div></div>';
 
-        // Override status
-        html += '<div id="overrideStatus" class="override-status" style="display:none;">';
-        html += '<span class="material-icons-round">warning</span><span>OVERRIDE: </span><span id="overrideInfo"></span>';
-        html += '<span id="overridePhaseLabel" class="override-phase-label">DEGRADANDO</span>';
-        html += '<div class="override-progress"><div class="override-progress-bar" id="overrideProgressBar"></div></div>';
-        html += '</div>';
+        // Override container (multi-override)
+        html += '<div id="overrideContainer" class="override-container"></div>';
 
         // Simulation panel
         html += '<div class="panel"><div class="panel-header"><span class="material-icons-round">science</span><h3>Simulacion - Lazo Cerrado</h3><div class="panel-tag">SYS//SIM_CTRL</div></div>';
@@ -226,6 +222,7 @@ var DashboardModule = (function() {
         var data = AppState.get('sensors') || {};
         updateSensors(data);
         loadChartData();
+        if (typeof OverrideManager !== 'undefined') OverrideManager.update();
     }
 
     function updateSensors(data) {
@@ -397,3 +394,128 @@ var DashboardModule = (function() {
 })();
 
 if (typeof window !== 'undefined') window.DashboardModule = DashboardModule;
+
+// ============================================================
+// OverrideManager - Multi-override visualization
+// Tracks up to 4 active overrides with independent progress
+// ============================================================
+
+var OverrideManager = (function() {
+    var activeOverrides = [];
+    var timer = null;
+
+    var SENSOR_META = {
+        temp:      { icon: 'thermostat', label: 'Temperatura', unit: '\u00B0C', shared: true },
+        hum_amb:   { icon: 'air',        label: 'Humedad Amb', unit: '%',  shared: true },
+        hum_suelo: { icon: 'water_drop', label: 'Hum Suelo',   unit: '%',  shared: false },
+        ph:        { icon: 'science',    label: 'pH Suelo',    unit: 'pH', shared: false }
+    };
+
+    var PHASE_DURATIONS = { degrade: 21000, hold: 2000, recover: 60000 };
+
+    function add(sensor, maceta, valorObjetivo) {
+        remove(sensor, maceta);
+        activeOverrides.push({
+            sensor: sensor,
+            maceta: maceta,
+            valorObjetivo: valorObjetivo,
+            inicio: Date.now()
+        });
+        update();
+        startTimer();
+    }
+
+    function remove(sensor, maceta) {
+        activeOverrides = activeOverrides.filter(function(o) {
+            return !(o.sensor === sensor && o.maceta === maceta);
+        });
+    }
+
+    function getPhase(o) {
+        var elapsed = Date.now() - o.inicio;
+        if (elapsed < PHASE_DURATIONS.degrade) return 'degrading';
+        if (elapsed < PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold) return 'holding';
+        if (elapsed < PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold + PHASE_DURATIONS.recover) return 'recovering';
+        return 'done';
+    }
+
+    function getProgress(o) {
+        var elapsed = Date.now() - o.inicio;
+        var total = PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold + PHASE_DURATIONS.recover;
+        return Math.min(100, (elapsed / total) * 100);
+    }
+
+    function update() {
+        var mac = AppState.get('currentMaceta') || 1;
+        var visible = activeOverrides.filter(function(o) {
+            if (o.maceta === 0) return true;
+            return o.maceta === mac;
+        });
+        renderOverrides(visible);
+        updateSensorCards(visible);
+    }
+
+    function renderOverrides(overrides) {
+        var container = document.getElementById('overrideContainer');
+        if (!container) return;
+        if (overrides.length === 0) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+            return;
+        }
+        container.style.display = 'block';
+
+        var phaseLabel = { degrading: 'DEGRADANDO', holding: 'HOLDING', recovering: 'RECUPERANDO' };
+        var html = '';
+        overrides.forEach(function(o) {
+            var meta = SENSOR_META[o.sensor];
+            var phase = getPhase(o);
+            if (phase === 'done') {
+                remove(o.sensor, o.maceta);
+                return;
+            }
+            var progress = getProgress(o);
+            var macLabel = o.maceta === 0 ? 'Compartido' : 'MAC-' + o.maceta;
+            html += '<div class="override-row">';
+            html += '<span class="material-icons-round override-icon">' + meta.icon + '</span>';
+            html += '<span class="override-label">' + meta.label + ' <span class="override-mac-badge">' + macLabel + '</span></span>';
+            html += '<span class="override-phase-label phase-' + phase + '">' + phaseLabel[phase] + '</span>';
+            html += '<div class="override-progress"><div class="override-progress-bar bar-' + phase + '" style="width:' + progress + '%"></div></div>';
+            html += '</div>';
+        });
+        container.innerHTML = html;
+    }
+
+    function updateSensorCards(overrides) {
+        document.querySelectorAll('.sensor-card').forEach(function(c) {
+            c.classList.remove('sensor-override');
+        });
+        overrides.forEach(function(o) {
+            var card = document.querySelector('.sensor-card[data-sensor="' + o.sensor + '"]');
+            if (card) card.classList.add('sensor-override');
+        });
+    }
+
+    function startTimer() {
+        if (timer) return;
+        timer = setInterval(function() {
+            activeOverrides = activeOverrides.filter(function(o) {
+                return getPhase(o) !== 'done';
+            });
+            if (activeOverrides.length === 0) {
+                clearInterval(timer);
+                timer = null;
+                document.querySelectorAll('.sensor-card').forEach(function(c) {
+                    c.classList.remove('sensor-override');
+                });
+            }
+            update();
+        }, 500);
+    }
+
+    function getActive() { return activeOverrides; }
+
+    return { add: add, remove: remove, update: update, getActive: getActive };
+})();
+
+if (typeof window !== 'undefined') window.OverrideManager = OverrideManager;

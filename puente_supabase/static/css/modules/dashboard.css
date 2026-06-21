@@ -3,46 +3,117 @@
 .actuators-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; position: relative; z-index: 1; }
 .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 
-/* Override status */
-.override-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background: repeating-linear-gradient(45deg, #1a0000 0px, #1a0000 2px, #150000 2px, #150000 4px);
-    border: 3px solid #ef4444;
+/* Override Container - Multi-override support */
+.override-container {
+    display: none;
     margin-bottom: 16px;
+    border: 2px solid #ef4444;
+    background: repeating-linear-gradient(45deg, #1a0000 0px, #1a0000 2px, #150000 2px, #150000 4px);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #ef4444;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    animation: override-pulse 2s infinite;
 }
 
-.override-status .material-icons-round {
+@keyframes override-pulse {
+    0%, 100% { border-color: #ef4444; }
+    50% { border-color: #f59e0b; }
+}
+
+.override-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+}
+.override-row:last-child { border-bottom: none; }
+
+.override-icon {
+    font-size: 16px;
     color: #ef4444;
-    font-size: 18px;
+    flex-shrink: 0;
+    animation: icon-pulse 1.5s infinite;
+}
+
+@keyframes icon-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.override-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #fca5a5;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.override-mac-badge {
+    font-size: 9px;
+    padding: 1px 5px;
+    border: 1px solid #666;
+    color: #999;
+    margin-left: 4px;
+    vertical-align: middle;
 }
 
 .override-phase-label {
     margin-left: auto;
     padding: 2px 8px;
-    border: 2px solid #ef4444;
+    border: 2px solid;
     font-size: 9px;
     font-weight: 700;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.override-phase-label.phase-degrading {
+    color: #ef4444;
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
+}
+.override-phase-label.phase-holding {
+    color: #f59e0b;
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
+}
+.override-phase-label.phase-recovering {
+    color: #22c55e;
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.15);
 }
 
 .override-progress {
-    width: 100px;
+    width: 80px;
     height: 4px;
     background: #333;
     overflow: hidden;
+    flex-shrink: 0;
 }
 
 .override-progress-bar {
     height: 100%;
-    background: #ef4444;
-    transition: width 0.3s;
+    transition: width 0.5s linear;
+}
+.override-progress-bar.bar-degrading {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+.override-progress-bar.bar-holding {
+    background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+.override-progress-bar.bar-recovering {
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+/* Sensor card override highlight */
+.sensor-override {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.3) !important;
+    animation: sensor-pulse 2s infinite;
+}
+
+@keyframes sensor-pulse {
+    0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); }
+    50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.5); }
 }
 
 /* Simulation panel */

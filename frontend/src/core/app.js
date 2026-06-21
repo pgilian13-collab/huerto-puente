@@ -61,6 +61,9 @@ var App = (function() {
             ApiService.bridgePost('/api/simulacion/alerta', payload).then(function(res) {
                 if (res && res.success) {
                     console.log('[SIM] Alerta enviada: ' + data.tipo);
+                    if (typeof OverrideManager !== 'undefined') {
+                        OverrideManager.add(data.sensor, payload.maceta_numero, data.valor);
+                    }
                 } else {
                     console.error('[SIM] Error al enviar alerta');
                 }
