@@ -51,6 +51,18 @@ var SensorService = (function() {
         });
     }
 
+    function fetchHistoryForMaceta(invIndex, maceta, limit) {
+        limit = limit || 48;
+        var deviceId = invIndex + 1;
+        var shared = getSharedSensorIds(deviceId);
+        var macetaIds = getMacetaSensorIds(deviceId, maceta);
+        var ids = [shared.temp, shared.hum_amb, macetaIds.hum_suelo, macetaIds.ph];
+        var params = 'sensor_id=in.(' + ids.join(',') + ')&order=fecha_hora.desc&limit=' + (limit * 4);
+        return ApiService.sbQuery('monitoreo_lecturas', params).then(function(rows) {
+            return rows || [];
+        });
+    }
+
     function startPolling(invIndex) {
         stopPolling();
         pollTimer = setInterval(function() {
@@ -148,6 +160,7 @@ var SensorService = (function() {
         getMacetaSensorIds: getMacetaSensorIds,
         fetchLatest: fetchLatest,
         fetchHistory: fetchHistory,
+        fetchHistoryForMaceta: fetchHistoryForMaceta,
         startPolling: startPolling,
         stopPolling: stopPolling,
         startRealtime: startRealtime,

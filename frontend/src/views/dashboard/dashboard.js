@@ -185,7 +185,10 @@ var DashboardModule = (function() {
 
     function loadChartData() {
         var inv = AppState.get('currentInv') || 0;
-        SensorService.fetchHistory(inv, 100).then(function(rows) { renderChart(rows); });
+        var mac = AppState.get('currentMaceta') || 1;
+        SensorService.fetchHistoryForMaceta(inv, mac, 48).then(function(rows) {
+            renderChart(rows);
+        });
     }
 
     function onSensorsUpdated(data) {
@@ -239,46 +242,94 @@ var DashboardModule = (function() {
         var shared = SensorService.getSharedSensorIds(inv + 1);
         var macetaIds = SensorService.getMacetaSensorIds(inv + 1, mac);
 
-        var sensorConfig = [
-            { id: shared.temp, name: 'Temperatura', color: '#ef4444' },
-            { id: shared.hum_amb, name: 'Humedad Amb', color: '#3b82f6' },
-            { id: macetaIds.hum_suelo, name: 'Hum Suelo MAC-' + mac, color: '#22c55e' },
-            { id: macetaIds.ph, name: 'pH MAC-' + mac, color: '#f59e0b' }
-        ];
-
-        var bySensor = {};
-        rows.forEach(function(r) {
-            if (!bySensor[r.sensor_id]) bySensor[r.sensor_id] = [];
-            bySensor[r.sensor_id].push({ x: new Date(r.fecha_hora), y: r.valor_lectura });
+        var temporal = {};
+        rows.forEach(function(l) {
+            var fecha = new Date(l.fecha_hora);
+            var ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
+            if (!temporal[ts]) temporal[ts] = {};
+            if (l.sensor_id === shared.temp) temporal[ts].temp = l.valor_lectura;
+            if (l.sensor_id === shared.hum_amb) temporal[ts].humAmb = l.valor_lectura;
+            if (l.sensor_id === macetaIds.hum_suelo) temporal[ts].humSuelo = l.valor_lectura;
+            if (l.sensor_id === macetaIds.ph) temporal[ts].ph = l.valor_lectura;
         });
 
-        var datasets = [];
-        sensorConfig.forEach(function(cfg) {
-            if (bySensor[cfg.id]) {
-                datasets.push({
-                    label: cfg.name,
-                    data: bySensor[cfg.id].reverse(),
-                    borderColor: cfg.color,
-                    backgroundColor: cfg.color + '20',
-                    tension: 0.3,
-                    pointRadius: 1,
-                    fill: true
-                });
-            }
-        });
+        var labels = Object.keys(temporal).reverse();
 
         chart = new Chart(canvas, {
             type: 'line',
-            data: { datasets: datasets },
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Temperatura (\u00B0C)',
+                        data: labels.map(function(k) { return temporal[k].temp != null ? temporal[k].temp : null; }),
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Humedad Suelo (%)',
+                        data: labels.map(function(k) { return temporal[k].humSuelo != null ? temporal[k].humSuelo : null; }),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Humedad Ambiente (%)',
+                        data: labels.map(function(k) { return temporal[k].humAmb != null ? temporal[k].humAmb : null; }),
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'pH',
+                        data: labels.map(function(k) { return temporal[k].ph != null ? temporal[k].ph : null; }),
+                        borderColor: '#a855f7',
+                        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        borderWidth: 2,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: {
-                    x: { type: 'time', time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } }, grid: { color: '#1e1e1e' }, ticks: { color: '#666', font: { family: 'JetBrains Mono', size: 10 } } },
-                    y: { grid: { color: '#1e1e1e' }, ticks: { color: '#666', font: { family: 'JetBrains Mono', size: 10 } } }
-                },
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
                 plugins: {
-                    legend: { labels: { color: '#ccc', font: { family: 'JetBrains Mono', size: 11 }, usePointStyle: true, pointStyle: 'line' } },
-                    tooltip: { backgroundColor: '#1a1a1a', titleColor: '#ccc', bodyColor: '#aaa', borderColor: '#333', borderWidth: 1, titleFont: { family: 'JetBrains Mono' }, bodyFont: { family: 'JetBrains Mono' } }
+                    legend: {
+                        labels: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 }, usePointStyle: true, pointStyle: 'circle' }
+                    },
+                    tooltip: {
+                        backgroundColor: '#1e293b',
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#94a3b8',
+                        borderColor: '#334155',
+                        borderWidth: 1,
+                        padding: 10,
+                        cornerRadius: 8
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.5)' } },
+                    y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.5)' }, min: 0, max: 100 },
+                    y1: {
+                        position: 'right',
+                        ticks: { color: '#a855f7', font: { size: 10 } },
+                        grid: { drawOnChartArea: false },
+                        min: 0, max: 14
+                    }
                 }
             }
         });
