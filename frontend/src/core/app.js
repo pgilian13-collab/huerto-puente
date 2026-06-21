@@ -35,6 +35,9 @@ var App = (function() {
             });
             SensorService.init(data.index);
             ActuatorService.fetchActuadores(data.index);
+            if (typeof DashboardModule !== 'undefined' && DashboardModule.loadConfigFromSupabase) {
+                DashboardModule.loadConfigFromSupabase(data.index);
+            }
         });
 
         // 6. Listen for maceta changes

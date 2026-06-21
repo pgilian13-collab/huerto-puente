@@ -181,6 +181,33 @@ var DashboardModule = (function() {
         });
         ActuatorService.fetchActuadores(inv);
         loadChartData();
+        loadConfigFromSupabase(inv);
+    }
+
+    function loadConfigFromSupabase(invIndex) {
+        var deviceId = invIndex + 1;
+        ApiService.sbQuery('configuracion', 'dispositivo_id=eq.' + deviceId).then(function(rows) {
+            if (rows && rows.length > 0 && rows[0].umbrales) {
+                var umbrales = rows[0].umbrales;
+                AppState.set('umbrales', umbrales);
+                AppState.persistUmbrales();
+                var u = umbrales;
+                setConfigInput('cfg-temp', u.temp);
+                setConfigInput('cfg-hum', u.humAmb);
+                setConfigInput('cfg-ph', u.ph);
+                console.log('[CONFIG] Umbrales cargados desde Supabase');
+            }
+        }).catch(function(e) {
+            console.error('[CONFIG] Error cargando umbrales:', e);
+        });
+    }
+
+    function setConfigInput(prefix, range) {
+        if (!range) return;
+        var minEl = document.getElementById(prefix + '-min');
+        var maxEl = document.getElementById(prefix + '-max');
+        if (minEl) minEl.value = range.min;
+        if (maxEl) maxEl.value = range.max;
     }
 
     function loadChartData() {
@@ -341,10 +368,32 @@ var DashboardModule = (function() {
         };
         AppState.set('umbrales', umbrales);
         AppState.persistUmbrales();
-        console.log('[CONFIG] Umbrales guardados');
+
+        var inv = AppState.get('currentInv') || 0;
+        var deviceId = inv + 1;
+        var payload = { dispositivo_id: deviceId, umbrales: umbrales, updated_at: new Date().toISOString() };
+        ApiService.sbQuery('configuracion', 'dispositivo_id=eq.' + deviceId).then(function(existing) {
+            if (existing && existing.length > 0) {
+                return ApiService.sbPatch('configuracion', existing[0].id, payload);
+            } else {
+                return ApiService.sbInsert('configuracion', { dispositivo_id: deviceId, umbrales: umbrales });
+            }
+        }).then(function() {
+            console.log('[CONFIG] Umbrales guardados en Supabase');
+        }).catch(function(e) {
+            console.error('[CONFIG] Error guardando en Supabase:', e);
+        });
+
+        var btn = document.querySelector('.btn-save');
+        if (btn) {
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<span class="material-icons-round">check</span> Guardado';
+            btn.style.background = '#16a34a';
+            setTimeout(function() { btn.innerHTML = orig; btn.style.background = ''; }, 2000);
+        }
     }
 
-    return { init: init, destroy: destroy };
+    return { init: init, destroy: destroy, loadConfigFromSupabase: loadConfigFromSupabase };
 })();
 
 if (typeof window !== 'undefined') window.DashboardModule = DashboardModule;
