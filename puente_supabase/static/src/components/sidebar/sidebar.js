@@ -4,10 +4,10 @@
 
 var SidebarComponent = (function() {
     var NAV_ITEMS = [
-        { id: 'dashboard', icon: 'dashboard', label: 'Dashboard', desc: 'Panel principal' },
-        { id: 'tabla', icon: 'table_chart', label: 'Tabla Sensores', desc: 'Datos en tiempo real' },
-        { id: 'reportes', icon: 'assessment', label: 'Reportes', desc: 'Analisis historico' },
-        { id: 'juego', icon: 'videogame_asset', label: 'Juego', desc: 'Huerto Challenge' }
+        { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
+        { id: 'tabla', icon: 'table_chart', label: 'Tabla Sensores' },
+        { id: 'reportes', icon: 'assessment', label: 'Reportes' },
+        { id: 'juego', icon: 'videogame_asset', label: 'Juego' }
     ];
 
     function render() {
@@ -29,19 +29,17 @@ var SidebarComponent = (function() {
         }
         html += '</div>';
 
-        // Navigation grid
+        // Navigation list
         html += '<div class="sidebar-nav">';
-        html += '<div class="sidebar-grid">';
         NAV_ITEMS.forEach(function(item) {
             if (item.id === 'juego' && !isAdmin) return;
             var active = currentView === item.id ? ' active' : '';
             html += '<div class="sidebar-nav-item' + active + '" data-view="' + item.id + '">';
             html += '<span class="material-icons-round">' + item.icon + '</span>';
-            html += '<div class="sidebar-nav-label">' + item.label + '</div>';
-            html += '<div class="sidebar-nav-desc">' + item.desc + '</div>';
+            html += '<span class="sidebar-nav-label">' + item.label + '</span>';
             html += '</div>';
         });
-        html += '</div></div>';
+        html += '</div>';
 
         // User info
         html += '<div class="sidebar-user">';
@@ -86,7 +84,7 @@ var SidebarComponent = (function() {
             invTabs[j].addEventListener('click', function() {
                 var idx = parseInt(this.dataset.index);
                 EventBus.emit('device:changed', { index: idx, id: idx + 1 });
-                // Update active state
+                // Update active state without re-rendering
                 container.querySelectorAll('.sidebar-inv-tab').forEach(function(t) { t.classList.remove('active'); });
                 this.classList.add('active');
             });
@@ -145,7 +143,6 @@ var SidebarComponent = (function() {
 
         // Listen for route changes to refresh active state
         EventBus.on('route:changed', function() { refresh(); });
-        EventBus.on('device:changed', function() { refresh(); });
     }
 
     return { mount: mount, refresh: refresh, open: open, close: close, init: init };
