@@ -334,6 +334,14 @@ led_naranja = Pin(33, Pin.OUT)
 led_amarillo = Pin(25, Pin.OUT)
 led_verde = Pin(1, Pin.OUT)
 
+# LEDs por maceta - indican si algun relay de la maceta esta activo
+led_macetas = {
+    1: Pin(2, Pin.OUT),
+    2: Pin(3, Pin.OUT),
+    3: Pin(19, Pin.OUT),
+    4: Pin(35, Pin.OUT),
+}
+
 # OLED
 oled = None
 try:
@@ -457,6 +465,12 @@ def set_relay(maceta, nombre, estado):
         chip = pcf1 if chip_num == 1 else pcf2
         if chip:
             chip.write_pin(led_pin, 1 if estado == 'ON' else 0)
+    actualizar_led_maceta(maceta)
+
+def actualizar_led_maceta(maceta):
+    """Enciende LED si algun relay de la maceta esta activo."""
+    activo = any(RELAYS[maceta][n].value() for n in ['bomba', 'ventilador', 'pulverizador'])
+    led_macetas[maceta].value(1 if activo else 0)
 
 def set_buzzer(freq, duty):
     if freq > 0:
@@ -650,6 +664,12 @@ def actualizar_oled(maceta_num, datos):
         oled.text("Suelo: {}%".format(int(datos['hum_suelo'])), 0, 36)
     if datos.get('ph') is not None:
         oled.text("pH: {}".format(datos['ph']), 0, 48)
+
+    r = RELAYS[maceta_num]
+    b = "ON" if r['bomba'].value() else "OFF"
+    v = "ON" if r['ventilador'].value() else "OFF"
+    p = "ON" if r['pulverizador'].value() else "OFF"
+    oled.text("B:{} V:{} P:{}".format(b, v, p), 0, 56)
 
     oled.show()
 

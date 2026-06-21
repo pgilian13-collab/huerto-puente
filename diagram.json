@@ -35,7 +35,11 @@
     { "type": "chip-ph-sensor", "id": "ph1", "top": 730.62, "left": -638.4, "attrs": { "ph": "7.0" } },
     { "type": "chip-ph-sensor", "id": "ph2", "top": 721.02, "left": -158.4, "attrs": { "ph": "6.5" } },
     { "type": "chip-ph-sensor", "id": "ph3", "top": 711.42, "left": 388.8, "attrs": { "ph": "6.8" } },
-    { "type": "chip-ph-sensor", "id": "ph4", "top": 701.82, "left": 820.8, "attrs": { "ph": "7.2" } }
+    { "type": "chip-ph-sensor", "id": "ph4", "top": 701.82, "left": 820.8, "attrs": { "ph": "7.2" } },
+    { "type": "wokwi-led", "id": "led_mac1", "top": 500, "left": -650, "attrs": { "color": "green" } },
+    { "type": "wokwi-led", "id": "led_mac2", "top": 480, "left": -170, "attrs": { "color": "green" } },
+    { "type": "wokwi-led", "id": "led_mac3", "top": 460, "left": 370, "attrs": { "color": "green" } },
+    { "type": "wokwi-led", "id": "led_mac4", "top": 440, "left": 800, "attrs": { "color": "green" } }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
@@ -121,7 +125,15 @@
     [ "esp:GND.3", "bb1:13b.j", "", [ "$bb" ] ],
     [ "esp:D1", "bb1:3b.j", "", [ "$bb" ] ],
     [ "esp:D0", "bb1:2b.j", "", [ "$bb" ] ],
-    [ "esp:CLK", "bb1:1b.j", "", [ "$bb" ] ]
+    [ "esp:CLK", "bb1:1b.j", "", [ "$bb" ] ],
+    [ "led_mac1:A", "esp:2", "green", [] ],
+    [ "led_mac1:C", "bb1:bn.2", "black", [] ],
+    [ "led_mac2:A", "esp:3", "green", [] ],
+    [ "led_mac2:C", "bb1:bn.12", "black", [] ],
+    [ "led_mac3:A", "esp:19", "green", [] ],
+    [ "led_mac3:C", "bb1:bn.17", "black", [] ],
+    [ "led_mac4:A", "esp:35", "green", [] ],
+    [ "led_mac4:C", "bb1:bn.14", "black", [] ]
   ],
   "dependencies": {}
 }
