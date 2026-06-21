@@ -132,6 +132,17 @@
     letter-spacing: 1px;
 }
 
+.sim-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: #f59e0b;
+    text-align: center;
+    padding: 2px 0;
+    border: 1px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+}
+
 /* Sim button colors */
 .sim-sequia .sim-btn { background: #001a00; color: #22c55e; border-top-color: #22c55e; box-shadow: inset 0 4px 0 #15803d; }
 .sim-sequia .sim-btn:hover { background: #22c55e; color: #000; }

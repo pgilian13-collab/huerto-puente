@@ -321,7 +321,6 @@ DHT_PIN = Pin(4)
 dht_sensor = dht.DHT22(DHT_PIN)
 
 # Relays - 3 por maceta + buzzer
-# NOTA: GPIO13 se usa para DHT22 MAC-4, bomba MAC-1 usa GPIO32
 RELAYS = {
     1: {'bomba': Pin(32, Pin.OUT), 'ventilador': Pin(14, Pin.OUT), 'pulverizador': Pin(5, Pin.OUT)},
     2: {'bomba': Pin(23, Pin.OUT), 'ventilador': Pin(0, Pin.OUT),  'pulverizador': Pin(15, Pin.OUT)},
@@ -454,6 +453,12 @@ def set_buzzer(freq, duty):
         buzzer.init(freq=freq, duty=duty)
     else:
         buzzer.init(freq=1, duty=0)
+
+def ejecutar_acciones_lazo(maceta, acciones):
+    """Ejecuta acciones del lazo cerrado en los relays."""
+    for nombre, estado in acciones:
+        set_relay(maceta, nombre, estado)
+        print("[LAZO] MAC-{} {} -> {}".format(maceta, nombre, estado))
 
 # ============================================================
 # FUNCIONES COMUNICACION - HTTP CLIENT REUTILIZABLE
