@@ -339,7 +339,6 @@ led_macetas = {
     1: Pin(2, Pin.OUT),
     2: Pin(3, Pin.OUT),
     3: Pin(19, Pin.OUT),
-    4: Pin(35, Pin.OUT),
 }
 
 # OLED
@@ -471,6 +470,8 @@ def set_relay(maceta, nombre, estado):
 
 def actualizar_led_maceta(maceta):
     """Enciende LED si algun relay de la maceta esta activo."""
+    if maceta not in led_macetas:
+        return
     activo = any(RELAYS[maceta][n].value() for n in ['bomba', 'ventilador', 'pulverizador'])
     led_macetas[maceta].value(1 if activo else 0)
 
