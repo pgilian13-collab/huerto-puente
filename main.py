@@ -478,7 +478,7 @@ last_lecturas_db = {}
 wifi_fail_count = 0
 
 def _http_post(path, data, timeout=10):
-    """POST con retry. Retorna (status_code, False) o (0, True) si fallo."""
+    """POST con retry. Retorna (status_code, json_dict) o (0, None) si fallo."""
     gc.collect()
     resp = None
     for intento in range(2):
@@ -490,10 +490,14 @@ def _http_post(path, data, timeout=10):
                 timeout=timeout
             )
             code = resp.status_code
+            try:
+                body = resp.json()
+            except:
+                body = None
             resp.close()
             resp = None
             gc.collect()
-            return code, False
+            return code, body
         except Exception as e:
             print("[HTTP] POST {} intento{}: {}".format(path, intento, e))
             if resp:
@@ -502,7 +506,7 @@ def _http_post(path, data, timeout=10):
             gc.collect()
             if intento == 0:
                 time.sleep(0.5)
-    return 0, True
+    return 0, None
 
 def _http_get(path, timeout=8):
     """GET con retry. Retorna (status_code, json_dict) o (0, None)."""
