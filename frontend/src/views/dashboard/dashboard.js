@@ -265,7 +265,7 @@ var DashboardModule = (function() {
         if (rows && rows.length > 0) {
             rows.forEach(function(l) {
             var fecha = new Date(l.fecha_hora);
-            var ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
+            var ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
             if (!temporal[ts]) temporal[ts] = {};
             if (l.sensor_id === shared.temp) temporal[ts].temp = l.valor_lectura;
             if (l.sensor_id === shared.hum_amb) temporal[ts].humAmb = l.valor_lectura;

@@ -474,7 +474,6 @@ def ejecutar_acciones_lazo(maceta, acciones):
 # FUNCIONES COMUNICACION - HTTP CLIENT REUTILIZABLE
 # ============================================================
 
-last_lecturas_db = {}
 wifi_fail_count = 0
 
 def _http_post(path, data, timeout=10):
@@ -562,25 +561,15 @@ def _http_patch(path, timeout=8):
 
 def sync_with_bridge(lecturas_db):
     """Piggyback: send sensors AND receive commands + overrides in ONE HTTP call.
-    Replaces: enviar_lecturas + recibir_comandos + recibir_alertas + llamar_cleanup
-    = 4 HTTP calls -> 1 call.
+    Sends ALL 10 sensors every call (no delta filter) to ensure complete data.
     """
-    global last_lecturas_db, wifi_fail_count
+    global wifi_fail_count
 
-    # Build delta (only changed sensors)
-    delta = {}
+    payload = {"device": MODULE_ID, "pending": True}
+    sensors = {}
     for l in lecturas_db:
-        sid = str(l["sensor_id"])
-        val = l["valor"]
-        prev = last_lecturas_db.get(l["sensor_id"])
-        if prev is None or abs(val - prev) > 0.05:
-            delta[sid] = val
-            last_lecturas_db[l["sensor_id"]] = val
-
-    if not delta:
-        return True
-
-    payload = {"device": MODULE_ID, "sensors": delta, "pending": True}
+        sensors[str(l["sensor_id"])] = l["valor"]
+    payload["sensors"] = sensors
     code, resp = _http_post("/api/sync", payload, timeout=10)
 
     if code == 0 or resp is None:
@@ -736,6 +725,7 @@ oled_mac = 1
 oled_timer = 0
 last_lecturas = {}
 heartbeat_timer = 0
+sync_counter = 0
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
 print("=== MODO HIBRIDO ACTIVADO ===")
@@ -794,7 +784,10 @@ while True:
         
         gc.collect()
         if wifi_ok:
-            sync_with_bridge(lecturas_db)
+            sync_counter += 1
+            if sync_counter >= 6:
+                sync_counter = 0
+                sync_with_bridge(lecturas_db)
 
             heartbeat_timer += 1
             if heartbeat_timer >= 20:
