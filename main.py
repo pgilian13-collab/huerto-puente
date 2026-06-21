@@ -426,13 +426,15 @@ def leer_mux(canal):
 
 def leer_suelo(maceta):
     raw = leer_mux(SOIL_CH[maceta - 1])
-    # Wokwi soil sensor: 0=seco, 4095=humedad max
-    # Mapear rango util (1000-3500) a 0-100%
+    if raw < 200 or raw > 3800:
+        return None
     pct = int((raw - 1000) / (3500 - 1000) * 100)
     return max(0, min(pct, 100))
 
 def leer_ph(maceta):
     raw = leer_mux(PH_CH[maceta - 1])
+    if raw < 200 or raw > 3800:
+        return None
     vadc = raw / 4095 * 3.3
     vph = vadc / 0.6
     ph = (4.2 - vph) / 0.3
@@ -658,12 +660,15 @@ def actualizar_oled(maceta_num, datos):
     oled.text("INV-{} MAC-{}".format(MODULE_ID, str(maceta_num).zfill(2)), 0, 0)
     oled.text("----------------", 0, 10)
 
-    if datos.get('temp') is not None:
-        oled.text("T:{}C H:{}".format(int(datos['temp']), int(datos.get('hum_amb', 0))), 0, 22)
-    if datos.get('hum_suelo') is not None:
-        oled.text("Suelo: {}%".format(int(datos['hum_suelo'])), 0, 36)
-    if datos.get('ph') is not None:
-        oled.text("pH: {}".format(datos['ph']), 0, 48)
+    temp_str = str(int(datos['temp'])) if datos.get('temp') is not None else "--"
+    hum_str = str(int(datos['hum_amb'])) if datos.get('hum_amb') is not None else "--"
+    oled.text("T:{}C H:{}%".format(temp_str, hum_str), 0, 22)
+
+    s_str = str(int(datos['hum_suelo'])) if datos.get('hum_suelo') is not None else "--"
+    oled.text("Suelo: {}%".format(s_str), 0, 36)
+
+    p_str = str(datos['ph']) if datos.get('ph') is not None else "--"
+    oled.text("pH: {}".format(p_str), 0, 48)
 
     r = RELAYS[maceta_num]
     b = "ON" if r['bomba'].value() else "OFF"
@@ -773,8 +778,10 @@ while True:
             ph = sensor_override.get_valor(m, 'ph', ph_fisico)
             
             base_mac = base_shared + 2 + (m - 1) * 2
-            lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo})
-            lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph})
+            if hum_suelo is not None:
+                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo})
+            if ph is not None:
+                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph})
 
             last_lecturas[m] = {
                 'temp': temp, 'hum_amb': hum_amb,
