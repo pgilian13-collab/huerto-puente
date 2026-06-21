@@ -52,6 +52,20 @@ var App = (function() {
 
         // 7. Listen for simulation alerts
         EventBus.on('simulation:alert', function(data) {
+            var umbrales = AppState.get('umbrales') || {};
+            var umbralMap = {
+                temp: umbrales.temp,
+                hum_amb: umbrales.humAmb,
+                hum_suelo: umbrales.humSuelo,
+                ph: umbrales.ph
+            };
+            var u = umbralMap[data.sensor];
+            if (u && data.valor >= u.min && data.valor <= u.max) {
+                console.log('[SIM] Valor ' + data.valor + ' dentro de rango seguro [' + u.min + '-' + u.max + ']. Simulacion no aplicada.');
+                showToast('Valor dentro de rango seguro — simulacion no aplicada', 'info');
+                return;
+            }
+
             var inv = AppState.get('currentInv') || 0;
             var deviceId = inv + 1;
             var mac = AppState.get('currentMaceta') || 1;
@@ -289,6 +303,20 @@ var App = (function() {
         el.innerHTML = '<div class="sensor-stat-item"><span class="stat-dot ok"></span>Min: ' + min.toFixed(1) + '</div>' +
             '<div class="sensor-stat-item"><span class="stat-dot alert"></span>Max: ' + max.toFixed(1) + '</div>' +
             '<div class="sensor-stat-item"><span class="stat-dot danger"></span>Prom: ' + avg.toFixed(1) + '</div>';
+    }
+
+    function showToast(message, type) {
+        var existing = document.querySelector('.sim-toast');
+        if (existing) existing.remove();
+        var toast = document.createElement('div');
+        toast.className = 'sim-toast sim-toast-' + (type || 'info');
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.classList.add('show'); }, 10);
+        setTimeout(function() {
+            toast.classList.remove('show');
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 3000);
     }
 
     return { init: init, logout: logout };

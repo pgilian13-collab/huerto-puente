@@ -398,11 +398,14 @@ if (typeof window !== 'undefined') window.DashboardModule = DashboardModule;
 // ============================================================
 // OverrideManager - Multi-override visualization
 // Tracks up to 4 active overrides with independent progress
+// Includes start delay and actuator visual sync
 // ============================================================
 
 var OverrideManager = (function() {
     var activeOverrides = [];
     var timer = null;
+
+    var START_DELAY = 3000;
 
     var SENSOR_META = {
         temp:      { icon: 'thermostat', label: 'Temperatura', unit: '\u00B0C', shared: true },
@@ -412,6 +415,13 @@ var OverrideManager = (function() {
     };
 
     var PHASE_DURATIONS = { degrade: 21000, hold: 2000, recover: 60000 };
+    var TOTAL_CYCLE = PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold + PHASE_DURATIONS.recover;
+
+    var ACTUATOR_MAP = {
+        hum_suelo: 'bomba',
+        temp: 'ventilador',
+        hum_amb: 'pulverizador'
+    };
 
     function add(sensor, maceta, valorObjetivo) {
         remove(sensor, maceta);
@@ -419,7 +429,7 @@ var OverrideManager = (function() {
             sensor: sensor,
             maceta: maceta,
             valorObjetivo: valorObjetivo,
-            inicio: Date.now()
+            inicio: Date.now() + START_DELAY
         });
         update();
         startTimer();
@@ -432,17 +442,22 @@ var OverrideManager = (function() {
     }
 
     function getPhase(o) {
-        var elapsed = Date.now() - o.inicio;
+        var now = Date.now();
+        if (now < o.inicio) return 'waiting';
+        var elapsed = now - o.inicio;
         if (elapsed < PHASE_DURATIONS.degrade) return 'degrading';
         if (elapsed < PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold) return 'holding';
-        if (elapsed < PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold + PHASE_DURATIONS.recover) return 'recovering';
+        if (elapsed < TOTAL_CYCLE) return 'recovering';
         return 'done';
     }
 
     function getProgress(o) {
-        var elapsed = Date.now() - o.inicio;
-        var total = PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold + PHASE_DURATIONS.recover;
-        return Math.min(100, (elapsed / total) * 100);
+        var now = Date.now();
+        if (now < o.inicio) {
+            return Math.min(100, ((START_DELAY - (o.inicio - now)) / START_DELAY) * 100);
+        }
+        var elapsed = now - o.inicio;
+        return Math.min(100, (elapsed / TOTAL_CYCLE) * 100);
     }
 
     function update() {
@@ -453,6 +468,7 @@ var OverrideManager = (function() {
         });
         renderOverrides(visible);
         updateSensorCards(visible);
+        updateActuators(visible);
     }
 
     function renderOverrides(overrides) {
@@ -465,7 +481,12 @@ var OverrideManager = (function() {
         }
         container.style.display = 'block';
 
-        var phaseLabel = { degrading: 'DEGRADANDO', holding: 'HOLDING', recovering: 'RECUPERANDO' };
+        var phaseLabel = {
+            waiting: 'ESPERANDO',
+            degrading: 'DEGRADANDO',
+            holding: 'HOLDING',
+            recovering: 'RECUPERANDO'
+        };
         var html = '';
         overrides.forEach(function(o) {
             var meta = SENSOR_META[o.sensor];
@@ -496,6 +517,47 @@ var OverrideManager = (function() {
         });
     }
 
+    function updateActuators(overrides) {
+        var actuadores = { bomba: false, ventilador: false, pulverizador: false };
+
+        overrides.forEach(function(o) {
+            var phase = getPhase(o);
+            if (phase === 'waiting' || phase === 'degrading' || phase === 'holding' || phase === 'recovering') {
+                var actName = ACTUATOR_MAP[o.sensor];
+                if (actName) actuadores[actName] = true;
+            }
+        });
+
+        for (var name in actuadores) {
+            if (!actuadores.hasOwnProperty(name)) continue;
+            var led = document.getElementById(name + '-led');
+            var stateEl = document.getElementById(name + '-state');
+            var btn = document.getElementById('btn-' + name);
+            var bar = document.getElementById(name + '-bar');
+            if (actuadores[name]) {
+                if (led) led.classList.add('active');
+                if (stateEl) stateEl.textContent = 'ON';
+                if (btn) {
+                    btn.classList.remove('off');
+                    btn.classList.add('on');
+                    var lbl = btn.querySelector('.btn-label');
+                    if (lbl) lbl.textContent = 'ON';
+                }
+                if (bar) bar.style.width = '100%';
+            } else {
+                if (led) led.classList.remove('active');
+                if (stateEl) stateEl.textContent = 'OFF';
+                if (btn) {
+                    btn.classList.remove('on');
+                    btn.classList.add('off');
+                    var lbl2 = btn.querySelector('.btn-label');
+                    if (lbl2) lbl2.textContent = 'OFF';
+                }
+                if (bar) bar.style.width = '0%';
+            }
+        }
+    }
+
     function startTimer() {
         if (timer) return;
         timer = setInterval(function() {
@@ -508,6 +570,7 @@ var OverrideManager = (function() {
                 document.querySelectorAll('.sensor-card').forEach(function(c) {
                     c.classList.remove('sensor-override');
                 });
+                updateActuators([]);
             }
             update();
         }, 500);

@@ -81,6 +81,11 @@
     border-color: #22c55e;
     background: rgba(34, 197, 94, 0.15);
 }
+.override-phase-label.phase-waiting {
+    color: #94a3b8;
+    border-color: #64748b;
+    background: rgba(100, 116, 139, 0.15);
+}
 
 .override-progress {
     width: 80px;
@@ -102,6 +107,9 @@
 }
 .override-progress-bar.bar-recovering {
     background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+.override-progress-bar.bar-waiting {
+    background: linear-gradient(90deg, #64748b, #475569);
 }
 
 /* Sensor card override highlight */
@@ -243,4 +251,42 @@
     .sim-card .sim-btn .btn-label { font-size: 9px; letter-spacing: 1px; }
     .sim-input { width: 56px; font-size: 12px; padding: 4px; }
     .sim-input-wrap { padding: 6px 8px 8px; }
+}
+
+/* Toast notifications */
+.sim-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    padding: 10px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: 2px solid;
+    z-index: 10000;
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+}
+.sim-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.sim-toast-info {
+    color: #94a3b8;
+    background: #1e293b;
+    border-color: #475569;
+}
+.sim-toast-success {
+    color: #22c55e;
+    background: #052e16;
+    border-color: #22c55e;
+}
+.sim-toast-warning {
+    color: #f59e0b;
+    background: #451a03;
+    border-color: #f59e0b;
 }
