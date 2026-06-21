@@ -404,23 +404,19 @@ def leer_mux(canal):
     MUX_S1.value((canal >> 1) & 1)
     MUX_S2.value((canal >> 2) & 1)
     MUX_S3.value((canal >> 3) & 1)
-    time.sleep_ms(50)
+    time.sleep_ms(20)
     return MUX_SIG.read()
 
 def leer_suelo(maceta):
     raw = leer_mux(SOIL_CH[maceta - 1])
-    raw2 = leer_mux(SOIL_CH[maceta - 1])
-    avg = (raw + raw2) // 2
     # Wokwi soil sensor: 0=seco, 4095=humedad max
     # Mapear rango util (1000-3500) a 0-100%
-    pct = int((avg - 1000) / (3500 - 1000) * 100)
+    pct = int((raw - 1000) / (3500 - 1000) * 100)
     return max(0, min(pct, 100))
 
 def leer_ph(maceta):
     raw = leer_mux(PH_CH[maceta - 1])
-    raw2 = leer_mux(PH_CH[maceta - 1])
-    avg = (raw + raw2) // 2
-    vadc = avg / 4095 * 3.3
+    vadc = raw / 4095 * 3.3
     vph = vadc / 0.6
     ph = (4.2 - vph) / 0.3
     return max(0.0, min(round(ph, 2), 14.0))
@@ -466,7 +462,7 @@ def set_buzzer(freq, duty):
 last_lecturas_db = {}
 wifi_fail_count = 0
 
-def _http_post(path, data, timeout=12):
+def _http_post(path, data, timeout=10):
     """POST con retry. Retorna (status_code, False) o (0, True) si fallo."""
     gc.collect()
     resp = None
@@ -490,10 +486,10 @@ def _http_post(path, data, timeout=12):
                 resp = None
             gc.collect()
             if intento == 0:
-                time.sleep(2)
+                time.sleep(0.5)
     return 0, True
 
-def _http_get(path, timeout=10):
+def _http_get(path, timeout=8):
     """GET con retry. Retorna (status_code, json_dict) o (0, None)."""
     gc.collect()
     resp = None
@@ -521,7 +517,7 @@ def _http_get(path, timeout=10):
                 resp = None
             gc.collect()
             if intento == 0:
-                time.sleep(2)
+                time.sleep(0.5)
     return 0, None
 
 def _http_patch(path, timeout=8):
@@ -793,7 +789,7 @@ while True:
             if oled_mac > 4:
                 oled_mac = 1
 
-        time.sleep(3)
+        time.sleep(0.5)
 
     except Exception as e:
         print("[ERROR] {}".format(e))

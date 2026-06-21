@@ -147,25 +147,33 @@ async def sync_device(data: dict):
     sensors = data.get("sensors", {})
     pending = data.get("pending", False)
 
-    results = []
-    errors = []
+    sensors_ok = 0
+    sensors_failed = 0
 
-    # 1) Write sensor readings (batch insert)
-    for sensor_id_str, valor in sensors.items():
-        try:
-            sid = int(sensor_id_str)
-            payload = {
-                "sensor_id": sid,
+    # 1) Batch insert sensor readings (single POST to Supabase)
+    if sensors:
+        batch = []
+        for sensor_id_str, valor in sensors.items():
+            batch.append({
+                "sensor_id": int(sensor_id_str),
                 "valor_lectura": round(float(valor), 2),
-            }
+            })
+        try:
             resp = await client.post(
                 f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas",
-                json=payload,
-                headers=HEADERS_SERVICE,
+                json=batch,
+                headers={
+                    **HEADERS_SERVICE,
+                    "Prefer": "return=minimal",
+                },
             )
-            results.append({"sensor_id": sid, "ok": resp.status_code in (200, 201)})
+            if resp.status_code in (200, 201, 204):
+                sensors_ok = len(batch)
+            else:
+                sensors_failed = len(batch)
         except Exception as e:
-            errors.append({"sensor_id": sensor_id_str, "error": str(e)})
+            sensors_failed = len(batch)
+            print(f"[SYNC] Batch insert error: {e}")
 
     # 2) Only query commands + overrides if ESP32 requests them
     commands = []
@@ -173,73 +181,85 @@ async def sync_device(data: dict):
     cleanup_needed = False
 
     if pending:
-        # Get pending commands
-        try:
-            resp = await client.get(
-                f"{SUPABASE_URL}/rest/v1/control_actuadores",
-                params={
-                    "dispositivo_id": f"eq.{device_id}",
-                    "estado_actual": "eq.PENDIENTE",
-                    "order": "fecha_solicitud.asc",
-                },
-                headers=HEADERS_SERVICE,
-            )
-            if resp.status_code == 200:
-                raw_cmds = resp.json()
-                for cmd in raw_cmds:
-                    cmd_id = cmd.get("id")
-                    if cmd_id:
-                        # Mark as executed immediately
-                        try:
-                            await client.patch(
-                                f"{SUPABASE_URL}/rest/v1/control_actuadores?id=eq.{cmd_id}",
-                                json={
-                                    "estado_actual": "EJECUTADO",
-                                    "fecha_ejecucion": datetime.now(timezone.utc).isoformat(),
-                                },
-                                headers=HEADERS_SERVICE,
-                            )
-                        except Exception:
-                            pass
-                    commands.append(cmd)
-        except Exception:
-            pass
+        # Run commands + overrides queries in parallel
+        async def fetch_commands():
+            try:
+                resp = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/control_actuadores",
+                    params={
+                        "dispositivo_id": f"eq.{device_id}",
+                        "estado_actual": "eq.PENDIENTE",
+                        "order": "fecha_solicitud.asc",
+                    },
+                    headers=HEADERS_SERVICE,
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+            except Exception:
+                pass
+            return []
 
-        # Get active overrides
-        try:
-            resp = await client.get(
-                f"{SUPABASE_URL}/rest/v1/simulacion_alertas",
-                params={
-                    "dispositivo_id": f"eq.{device_id}",
-                    "activa": "eq.true",
-                    "order": "created_at.desc",
-                    "limit": "10",
-                },
-                headers=HEADERS_SERVICE,
-            )
-            if resp.status_code == 200:
-                overrides = resp.json()
-                # Check if any override is older than 5 minutes
-                now = datetime.now(timezone.utc)
-                for o in overrides:
-                    created = o.get("created_at", "")
-                    if created:
-                        try:
-                            dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                            if (now - dt).total_seconds() > 300:
-                                cleanup_needed = True
-                                break
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+        async def fetch_overrides():
+            try:
+                resp = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/simulacion_alertas",
+                    params={
+                        "dispositivo_id": f"eq.{device_id}",
+                        "activa": "eq.true",
+                        "order": "created_at.desc",
+                        "limit": "10",
+                    },
+                    headers=HEADERS_SERVICE,
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+            except Exception:
+                pass
+            return []
+
+        raw_cmds, raw_overrides = await asyncio.gather(
+            fetch_commands(), fetch_overrides()
+        )
+        commands = raw_cmds
+        overrides = raw_overrides
+
+        # Batch mark all commands as executed (single PATCH)
+        cmd_ids = [cmd.get("id") for cmd in raw_cmds if cmd.get("id")]
+        if cmd_ids:
+            id_list = ",".join(str(cid) for cid in cmd_ids)
+            try:
+                await client.patch(
+                    f"{SUPABASE_URL}/rest/v1/control_actuadores?id=in.({id_list})",
+                    json={
+                        "estado_actual": "EJECUTADO",
+                        "fecha_ejecucion": datetime.now(timezone.utc).isoformat(),
+                    },
+                    headers={
+                        **HEADERS_SERVICE,
+                        "Prefer": "return=minimal",
+                    },
+                )
+            except Exception as e:
+                print(f"[SYNC] Batch mark executed error: {e}")
+
+        # Check if any override is older than 5 minutes
+        now = datetime.now(timezone.utc)
+        for o in raw_overrides:
+            created = o.get("created_at", "")
+            if created:
+                try:
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    if (now - dt).total_seconds() > 300:
+                        cleanup_needed = True
+                        break
+                except Exception:
+                    pass
 
     return {
-        "ok": len(errors) == 0,
-        "sensors_written": len(results),
-        "sensors_ok": sum(1 for r in results if r.get("ok")),
-        "sensors_failed": sum(1 for r in results if not r.get("ok")),
-        "errors": errors,
+        "ok": sensors_failed == 0,
+        "sensors_written": sensors_ok + sensors_failed,
+        "sensors_ok": sensors_ok,
+        "sensors_failed": sensors_failed,
         "commands": commands,
         "overrides": overrides,
         "cleanup": cleanup_needed,
