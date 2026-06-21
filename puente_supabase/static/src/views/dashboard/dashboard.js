@@ -232,18 +232,14 @@ var DashboardModule = (function() {
         if (!canvas) return;
         if (chart) chart.destroy();
 
-        if (!rows || rows.length === 0) {
-            canvas.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#64748b;font-family:JetBrains Mono;font-size:12px;letter-spacing:1px;">SIN DATOS HISTORICOS</div>';
-            return;
-        }
-
         var inv = AppState.get('currentInv') || 0;
         var mac = AppState.get('currentMaceta') || 1;
         var shared = SensorService.getSharedSensorIds(inv + 1);
         var macetaIds = SensorService.getMacetaSensorIds(inv + 1, mac);
 
         var temporal = {};
-        rows.forEach(function(l) {
+        if (rows && rows.length > 0) {
+            rows.forEach(function(l) {
             var fecha = new Date(l.fecha_hora);
             var ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
             if (!temporal[ts]) temporal[ts] = {};
@@ -252,6 +248,7 @@ var DashboardModule = (function() {
             if (l.sensor_id === macetaIds.hum_suelo) temporal[ts].humSuelo = l.valor_lectura;
             if (l.sensor_id === macetaIds.ph) temporal[ts].ph = l.valor_lectura;
         });
+        }
 
         var labels = Object.keys(temporal).reverse();
 
