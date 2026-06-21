@@ -3757,8 +3757,7 @@ body {
     padding: 20px 16px;
     border-bottom: 1px solid var(--border);
 }
-.sidebar-logo { font-size: 28px; }
-.sidebar-title { font-size: 14px; font-weight: 700; color: var(--text-primary); flex: 1; }
+.sidebar-logo-img { height: 32px; width: auto; object-fit: contain; flex: 1; }
 .sidebar-close {
     background: none;
     border: none;

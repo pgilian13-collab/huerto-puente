@@ -39,8 +39,7 @@ var SidebarComponent = (function() {
         var currentView = AppState.get('currentView');
 
         var html = '<div class="sidebar-header">';
-        html += '<div class="sidebar-logo"><span class="material-icons-round">eco</span></div>';
-        html += '<div class="sidebar-title">HUERTO<br>INTELIGENTE</div>';
+        html += '<img class="sidebar-logo-img" src="https://www.unheval.edu.pe/portal/wp-content/uploads/2025/02/logounh-324x84-1-300x78.png" alt="UNHEVAL">';
         html += '<button class="sidebar-close" onclick="SidebarComponent.close()"><span class="material-icons-round">close</span></button>';
         html += '</div>';
 
