@@ -6,6 +6,10 @@
 // ============================================================
 
 var App = (function() {
+    var lastSensorDataTime = 0;
+    var connectivityTimer = null;
+    var CONNECTIVITY_TIMEOUT = 15000;
+
     function init() {
         console.log('[App] Initializing Huerto Inteligente...');
 
@@ -98,24 +102,55 @@ var App = (function() {
             });
         });
 
-        // 7. Start router
+        // 9. Listen for sensor data → update connectivity timestamp
+        EventBus.on('sensors:updated', function() {
+            lastSensorDataTime = Date.now();
+            setLiveStatus(true);
+        });
+
+        // 10. Start router
         Router.init();
 
-        // 8. Initial data load
+        // 11. Initial data load
         SensorService.init(0);
         ActuatorService.fetchActuadores(0);
 
-        // 9. Init sensor modal
+        // 12. Init sensor modal
         initSensorModal();
 
-        // 10. Hide loader
+        // 13. Hide loader
         var loader = document.getElementById('loader');
         if (loader) loader.classList.add('hidden');
 
-        // 11. Update connection status
+        // 14. Update connection status
         updateStatus(true);
 
+        // 15. Start connectivity checker
+        startConnectivityChecker();
+
         console.log('[App] Ready.');
+    }
+
+    function startConnectivityChecker() {
+        if (connectivityTimer) clearInterval(connectivityTimer);
+        connectivityTimer = setInterval(function() {
+            if (lastSensorDataTime === 0) return;
+            var elapsed = Date.now() - lastSensorDataTime;
+            setLiveStatus(elapsed < CONNECTIVITY_TIMEOUT);
+        }, 5000);
+    }
+
+    function setLiveStatus(connected) {
+        var indicator = document.getElementById('liveIndicator');
+        var text = document.getElementById('liveText');
+        if (!indicator) return;
+        if (connected) {
+            indicator.classList.remove('disconnected');
+            if (text) text.textContent = 'LIVE';
+        } else {
+            indicator.classList.add('disconnected');
+            if (text) text.textContent = 'OFFLINE';
+        }
     }
 
     function registerRoutes() {

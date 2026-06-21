@@ -248,7 +248,6 @@ body {
     gap: 12px;
     position: relative;
     z-index: 1;
-    flex-shrink: 0;
 }
 
 .live-indicator {
@@ -267,11 +266,24 @@ body {
     box-shadow: 3px 3px 0 var(--accent-green);
 }
 
+.live-indicator.disconnected {
+    color: var(--accent-red);
+    background: #1a0000;
+    border-color: var(--accent-red);
+    box-shadow: 3px 3px 0 var(--accent-red);
+}
+
 .live-dot {
     width: 8px;
     height: 8px;
     background: var(--accent-green);
     animation: pulse 1.5s infinite;
+}
+
+.live-indicator.disconnected .live-dot {
+    background: var(--accent-red);
+    animation: none;
+    opacity: 0.4;
 }
 
 @keyframes pulse {
@@ -358,42 +370,6 @@ body {
     display: block;
     letter-spacing: 1px;
     text-transform: uppercase;
-}
-
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    position: relative;
-    z-index: 1;
-}
-
-.live-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: "JetBrains Mono", monospace;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--accent-green);
-    background: #001a00;
-    border: 2px solid var(--accent-green);
-    padding: 4px 10px;
-    text-transform: uppercase;
-    box-shadow: 3px 3px 0 var(--accent-green);
-}
-
-.live-dot {
-    width: 8px;
-    height: 8px;
-    background: var(--accent-green);
-    animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
 }
 
 .status-indicator {
