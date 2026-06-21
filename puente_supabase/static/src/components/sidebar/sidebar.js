@@ -68,9 +68,9 @@ var SidebarComponent = (function() {
         html += '</nav>';
 
         html += '<div class="sidebar-footer">';
-        html += '<button class="menu-item" id="btnLogout" onclick="App.logout()">';
+        html += '<div class="menu-item" id="btnLogout">';
         html += '<span class="material-icons-round">logout</span> Cerrar Sesion';
-        html += '</button>';
+        html += '</div>';
         html += '</div>';
 
         return html;
@@ -90,6 +90,12 @@ var SidebarComponent = (function() {
                 var view = this.getAttribute('data-view');
                 EventBus.emit('sidebar:navigate', view);
                 close();
+            });
+        }
+        var logoutBtn = container.querySelector('#btnLogout');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', function() {
+                App.logout();
             });
         }
     }
