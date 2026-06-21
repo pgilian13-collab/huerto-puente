@@ -785,7 +785,7 @@ while True:
         gc.collect()
         if wifi_ok:
             sync_counter += 1
-            if sync_counter >= 6:
+            if sync_counter >= 14:
                 sync_counter = 0
                 sync_with_bridge(lecturas_db)
 

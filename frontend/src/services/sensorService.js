@@ -11,6 +11,7 @@ var SensorService = (function() {
     var POLL_MS = 5000;
     var USE_REALTIME = true;
     var INV_INDEX = 0;
+    var connectionStartTime = null;
 
     function getSensorIds(deviceId) {
         var base = (deviceId - 1) * 10;
@@ -58,6 +59,9 @@ var SensorService = (function() {
         var macetaIds = getMacetaSensorIds(deviceId, maceta);
         var ids = [shared.temp, shared.hum_amb, macetaIds.hum_suelo, macetaIds.ph];
         var params = 'sensor_id=in.(' + ids.join(',') + ')&order=fecha_hora.desc&limit=' + (limit * 4);
+        if (connectionStartTime) {
+            params += '&fecha_hora=gte.' + connectionStartTime;
+        }
         return ApiService.sbQuery('monitoreo_lecturas', params).then(function(rows) {
             return rows || [];
         });
@@ -131,6 +135,7 @@ var SensorService = (function() {
 
     function init(invIndex) {
         INV_INDEX = invIndex;
+        connectionStartTime = new Date().toISOString();
         return fetchLatest(invIndex).then(function(data) {
             AppState.set('sensors', data);
             EventBus.emit('sensors:updated', data);
