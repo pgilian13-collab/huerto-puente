@@ -1,48 +1,49 @@
 // ============================================================
-// Sidebar Component - Professional navigation hub
-// ============================================================
-// Organized by functional modules with section grouping.
+// Sidebar Component - Fullscreen overlay menu
 // ============================================================
 
 var SidebarComponent = (function() {
-    var NAV_SECTIONS = [
-        {
-            label: 'SISTEMA',
-            items: [
-                { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' }
-            ]
-        },
-        {
-            label: 'MONITOREO',
-            items: [
-                { id: 'tabla', icon: 'table_chart', label: 'Tabla Sensores' }
-            ]
-        },
-        {
-            label: 'ANALITICA',
-            items: [
-                { id: 'reportes', icon: 'assessment', label: 'Reportes' }
-            ]
-        },
-        {
-            label: 'SIMULACION',
-            adminOnly: true,
-            items: [
-                { id: 'juego', icon: 'videogame_asset', label: 'Huerto Challenge' }
-            ]
-        }
+    var NAV_ITEMS = [
+        { id: 'dashboard', icon: 'dashboard', label: 'Dashboard', desc: 'Panel principal' },
+        { id: 'tabla', icon: 'table_chart', label: 'Tabla Sensores', desc: 'Datos en tiempo real' },
+        { id: 'reportes', icon: 'assessment', label: 'Reportes', desc: 'Analisis historico' },
+        { id: 'juego', icon: 'videogame_asset', label: 'Juego', desc: 'Huerto Challenge' }
     ];
 
     function render() {
         var user = AppState.get('user') || {};
         var isAdmin = AppState.get('isAdmin');
         var currentView = AppState.get('currentView');
+        var currentInv = AppState.get('currentInv') || 0;
 
         var html = '<div class="sidebar-header">';
         html += '<img class="sidebar-logo-img" src="https://www.unheval.edu.pe/portal/wp-content/uploads/2025/02/logounh-324x84-1-300x78.png" alt="UNHEVAL">';
-        html += '<button class="sidebar-close" onclick="SidebarComponent.close()"><span class="material-icons-round">close</span></button>';
+        html += '<button class="sidebar-close" id="sidebarClose"><span class="material-icons-round">close</span></button>';
         html += '</div>';
 
+        // Greenhouse tabs
+        html += '<div class="sidebar-inv-tabs">';
+        for (var i = 0; i < 5; i++) {
+            var active = i === currentInv ? ' active' : '';
+            html += '<div class="sidebar-inv-tab' + active + '" data-index="' + i + '">INV-0' + (i + 1) + '</div>';
+        }
+        html += '</div>';
+
+        // Navigation grid
+        html += '<div class="sidebar-nav">';
+        html += '<div class="sidebar-grid">';
+        NAV_ITEMS.forEach(function(item) {
+            if (item.id === 'juego' && !isAdmin) return;
+            var active = currentView === item.id ? ' active' : '';
+            html += '<div class="sidebar-nav-item' + active + '" data-view="' + item.id + '">';
+            html += '<span class="material-icons-round">' + item.icon + '</span>';
+            html += '<div class="sidebar-nav-label">' + item.label + '</div>';
+            html += '<div class="sidebar-nav-desc">' + item.desc + '</div>';
+            html += '</div>';
+        });
+        html += '</div></div>';
+
+        // User info
         html += '<div class="sidebar-user">';
         html += '<div class="user-avatar">' + (user.email ? user.email[0].toUpperCase() : 'U') + '</div>';
         html += '<div class="user-info">';
@@ -51,21 +52,7 @@ var SidebarComponent = (function() {
         html += '</div>';
         html += '</div>';
 
-        html += '<nav class="sidebar-menu">';
-        NAV_SECTIONS.forEach(function(section) {
-            if (section.adminOnly && !isAdmin) return;
-            html += '<div class="menu-section">';
-            html += '<span class="menu-label">' + section.label + '</span>';
-            section.items.forEach(function(item) {
-                var active = currentView === item.id ? ' active' : '';
-                html += '<div class="menu-item' + active + '" data-view="' + item.id + '">';
-                html += '<span class="material-icons-round">' + item.icon + '</span> ' + item.label;
-                html += '</div>';
-            });
-            html += '</div>';
-        });
-        html += '</nav>';
-
+        // Logout
         html += '<div class="sidebar-footer">';
         html += '<div class="menu-item" id="btnLogout">';
         html += '<span class="material-icons-round">logout</span> Cerrar Sesion';
@@ -83,7 +70,8 @@ var SidebarComponent = (function() {
     }
 
     function bindEvents(container) {
-        var items = container.querySelectorAll('.menu-item[data-view]');
+        // Navigation items
+        var items = container.querySelectorAll('.sidebar-nav-item[data-view]');
         for (var i = 0; i < items.length; i++) {
             items[i].addEventListener('click', function() {
                 var view = this.getAttribute('data-view');
@@ -91,6 +79,26 @@ var SidebarComponent = (function() {
                 close();
             });
         }
+
+        // Greenhouse tabs
+        var invTabs = container.querySelectorAll('.sidebar-inv-tab');
+        for (var j = 0; j < invTabs.length; j++) {
+            invTabs[j].addEventListener('click', function() {
+                var idx = parseInt(this.dataset.index);
+                EventBus.emit('device:changed', { index: idx, id: idx + 1 });
+                // Update active state
+                container.querySelectorAll('.sidebar-inv-tab').forEach(function(t) { t.classList.remove('active'); });
+                this.classList.add('active');
+            });
+        }
+
+        // Close button
+        var closeBtn = container.querySelector('#sidebarClose');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', close);
+        }
+
+        // Logout button
         var logoutBtn = container.querySelector('#btnLogout');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', function() {
@@ -122,11 +130,22 @@ var SidebarComponent = (function() {
 
     function init() {
         refresh();
-        EventBus.on('route:changed', function() { refresh(); });
-        var hamburger = document.querySelector('.hamburger-btn');
-        if (hamburger) hamburger.addEventListener('click', open);
+
+        // Menu toggle button
+        var toggle = document.getElementById('menuToggle');
+        if (toggle) {
+            toggle.addEventListener('click', open);
+        }
+
+        // Overlay click to close
         var overlay = document.getElementById('sidebarOverlay');
-        if (overlay) overlay.addEventListener('click', close);
+        if (overlay) {
+            overlay.addEventListener('click', close);
+        }
+
+        // Listen for route changes to refresh active state
+        EventBus.on('route:changed', function() { refresh(); });
+        EventBus.on('device:changed', function() { refresh(); });
     }
 
     return { mount: mount, refresh: refresh, open: open, close: close, init: init };

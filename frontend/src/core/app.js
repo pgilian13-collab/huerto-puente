@@ -92,10 +92,7 @@ var App = (function() {
             });
         });
 
-        // 7. Init greenhouse tabs
-        initInvTabs();
-
-        // 8. Start router
+        // 7. Start router
         Router.init();
 
         // 8. Initial data load
@@ -155,26 +152,6 @@ var App = (function() {
 
         Router.register('config', {
             load: function(done) { Router.navigate('dashboard'); }
-        });
-    }
-
-    function initInvTabs() {
-        var container = document.getElementById('invTabs');
-        if (!container) return;
-        var names = ['INV-01', 'INV-02', 'INV-03', 'INV-04', 'INV-05'];
-        var html = '';
-        for (var i = 0; i < 5; i++) {
-            html += '<div class="inv-tab' + (i === 0 ? ' active' : '') + '" data-index="' + i + '">' + names[i] + '</div>';
-        }
-        container.innerHTML = html;
-        var tabs = container.querySelectorAll('.inv-tab');
-        for (var j = 0; j < tabs.length; j++) {
-            tabs[j].addEventListener('click', function() {
-                var idx = parseInt(this.dataset.index);
-                container.querySelectorAll('.inv-tab').forEach(function(t) { t.classList.remove('active'); });
-                this.classList.add('active');
-                EventBus.emit('device:changed', { index: idx, id: idx + 1 });
-            });
         });
     }
 
