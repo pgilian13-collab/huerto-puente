@@ -335,8 +335,18 @@ led_amarillo = Pin(25, Pin.OUT)
 led_verde = Pin(1, Pin.OUT)
 
 # OLED
-i2c = I2C(0, scl=Pin(22), sda=Pin(21))
-oled = ssd1306.SSD1306_I2C(128, 64, i2c)
+oled = None
+try:
+    i2c = I2C(0, scl=Pin(22), sda=Pin(21))
+    devices = i2c.scan()
+    if devices:
+        oled = ssd1306.SSD1306_I2C(128, 64, i2c)
+        print("[OLED] OK en I2C {}".format(devices))
+    else:
+        print("[OLED] No hay dispositivos I2C")
+except Exception as e:
+    print("[OLED] ERROR I2C: {}".format(e))
+    oled = None
 
 # ============================================================
 # PCF8574 I2C EXPANDER - RELAY STATUS LEDs
@@ -635,6 +645,8 @@ def llamar_heartbeat():
 # ============================================================
 
 def actualizar_oled(maceta_num, datos):
+    if not oled:
+        return
     oled.fill(0)
     oled.text("INV-{} MAC-{}".format(MODULE_ID, str(maceta_num).zfill(2)), 0, 0)
     oled.text("----------------", 0, 10)
@@ -705,14 +717,15 @@ def evaluar_alertas(datos):
 # Conectar WiFi primero
 wifi_ok = connect_wifi()
 
-oled.fill(0)
-if wifi_ok:
-    oled.text("WiFi: OK", 0, 0)
-else:
-    oled.text("WiFi: FAIL", 0, 0)
-oled.text("INV-{} ONLINE".format(MODULE_ID), 0, 16)
-oled.text("Iniciando...", 0, 32)
-oled.show()
+if oled:
+    oled.fill(0)
+    if wifi_ok:
+        oled.text("WiFi: OK", 0, 0)
+    else:
+        oled.text("WiFi: FAIL", 0, 0)
+    oled.text("INV-{} ONLINE".format(MODULE_ID), 0, 16)
+    oled.text("Iniciando...", 0, 32)
+    oled.show()
 time.sleep(2)
 
 oled_mac = 1

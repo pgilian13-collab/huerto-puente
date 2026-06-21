@@ -75,7 +75,7 @@ def generar_lecturas(modulo_id):
     return lecturas
 
 
-def enviar Datos(modulo_id, lecturas):
+def enviar_Datos(modulo_id, lecturas):
     """Envia lecturas al bridge"""
     payload = {
         "dispositivo_id": modulo_id,
@@ -151,7 +151,7 @@ if __name__ == "__main__":
             print("[DATOS] Temp: {:.1f}C | HumSuelo: {:.1f}% | {} lecturas".format(
                 temp_val, hum_suelo_avg, len(lecturas)))
 
-            if enviar Datos(MODULE_ID, lecturas):
+            if enviar_Datos(MODULE_ID, lecturas):
                 envios_ok += 1
                 print("[ENV] OK (total: {})".format(envios_ok))
             else:
