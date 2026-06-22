@@ -276,6 +276,7 @@ var App = (function() {
             var filtered = rows.filter(function(r) { return r.sensor_id === sensorId; });
             renderSensorChart(filtered, sensorType);
             renderSensorStats(filtered);
+            renderSensorTable(filtered, sensorType);
         });
     }
 
@@ -303,6 +304,29 @@ var App = (function() {
         el.innerHTML = '<div class="sensor-stat-item"><span class="stat-dot ok"></span>Min: ' + min.toFixed(1) + '</div>' +
             '<div class="sensor-stat-item"><span class="stat-dot alert"></span>Max: ' + max.toFixed(1) + '</div>' +
             '<div class="sensor-stat-item"><span class="stat-dot danger"></span>Prom: ' + avg.toFixed(1) + '</div>';
+    }
+
+    function renderSensorTable(data, sensorType) {
+        var tbody = document.getElementById('sensorTablaBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--text-secondary);">Sin datos</td></tr>';
+            return;
+        }
+        var units = { temp: '\u00B0C', hum_amb: '%', hum_suelo: '%', ph: 'pH' };
+        var decimals = (sensorType === 'ph') ? 2 : 1;
+        data.forEach(function(r) {
+            var fecha = new Date(r.fecha_hora);
+            var ts = fecha.toLocaleString('es-PE', {
+                month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                timeZone: 'America/Lima'
+            });
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + ts + '</td><td>' + parseFloat(r.valor_lectura).toFixed(decimals) + ' ' + (units[sensorType] || '') + '</td>';
+            tbody.appendChild(tr);
+        });
     }
 
     function showToast(message, type) {
