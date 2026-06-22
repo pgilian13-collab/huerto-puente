@@ -334,12 +334,22 @@ led_naranja = Pin(33, Pin.OUT)
 led_amarillo = Pin(25, Pin.OUT)
 led_verde = Pin(1, Pin.OUT)
 
-# LEDs por maceta - indican si algun relay de la maceta esta activo
-led_macetas = {
-    1: Pin(2, Pin.OUT),
-    2: Pin(3, Pin.OUT),
-    3: Pin(19, Pin.OUT),
-}
+# LEDs por maceta via 74HC595 shift register
+SR_DATA = Pin(2, Pin.OUT)
+SR_CLK = Pin(3, Pin.OUT)
+SR_LATCH = Pin(19, Pin.OUT)
+led_maceta_state = 0b0000
+
+def shift_out_4bits(value):
+    """Shift 4 bits to 74HC595 (MSB first)."""
+    SR_LATCH.value(0)
+    for i in range(3, -1, -1):
+        SR_CLK.value(0)
+        SR_DATA.value((value >> i) & 1)
+        SR_CLK.value(1)
+    SR_LATCH.value(0)
+    SR_LATCH.value(1)
+    SR_LATCH.value(0)
 
 # OLED
 oled = None
@@ -469,11 +479,14 @@ def set_relay(maceta, nombre, estado):
     actualizar_led_maceta(maceta)
 
 def actualizar_led_maceta(maceta):
-    """Enciende LED si algun relay de la maceta esta activo."""
-    if maceta not in led_macetas:
-        return
+    """Actualiza LED de la maceta via shift register 74HC595."""
+    global led_maceta_state
     activo = any(RELAYS[maceta][n].value() for n in ['bomba', 'ventilador', 'pulverizador'])
-    led_macetas[maceta].value(1 if activo else 0)
+    if activo:
+        led_maceta_state |= (1 << (maceta - 1))
+    else:
+        led_maceta_state &= ~(1 << (maceta - 1))
+    shift_out_4bits(led_maceta_state)
 
 def set_buzzer(freq, duty):
     if freq > 0:

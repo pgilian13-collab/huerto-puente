@@ -38,7 +38,9 @@
     { "type": "chip-ph-sensor", "id": "ph4", "top": 701.82, "left": 820.8, "attrs": { "ph": "7.2" } },
     { "type": "wokwi-led", "id": "led_mac1", "top": 500, "left": -650, "attrs": { "color": "green" } },
     { "type": "wokwi-led", "id": "led_mac2", "top": 480, "left": -170, "attrs": { "color": "green" } },
-    { "type": "wokwi-led", "id": "led_mac3", "top": 460, "left": 370, "attrs": { "color": "green" } }
+    { "type": "wokwi-led", "id": "led_mac3", "top": 460, "left": 370, "attrs": { "color": "green" } },
+    { "type": "wokwi-led", "id": "led_mac4", "top": 440, "left": 800, "attrs": { "color": "green" } },
+    { "type": "wokwi-74hc595", "id": "sr1", "top": 350, "left": 50, "attrs": {} }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
@@ -125,12 +127,21 @@
     [ "esp:D1", "bb1:3b.j", "", [ "$bb" ] ],
     [ "esp:D0", "bb1:2b.j", "", [ "$bb" ] ],
     [ "esp:CLK", "bb1:1b.j", "", [ "$bb" ] ],
-    [ "led_mac1:A", "esp:2", "green", [] ],
+    [ "sr1:VCC", "esp:5V", "red", [] ],
+    [ "sr1:GND", "bb1:bn.6", "black", [] ],
+    [ "sr1:SER", "esp:2", "green", [] ],
+    [ "sr1:SRCLK", "esp:3", "blue", [] ],
+    [ "sr1:RCLK", "esp:19", "orange", [] ],
+    [ "sr1:OE", "bb1:bn.6", "black", [] ],
+    [ "sr1:SRCLR", "esp:5V", "red", [] ],
+    [ "led_mac1:A", "sr1:Q0", "green", [] ],
     [ "led_mac1:C", "bb1:bn.2", "black", [] ],
-    [ "led_mac2:A", "esp:3", "green", [] ],
+    [ "led_mac2:A", "sr1:Q1", "green", [] ],
     [ "led_mac2:C", "bb1:bn.12", "black", [] ],
-    [ "led_mac3:A", "esp:19", "green", [] ],
-    [ "led_mac3:C", "bb1:bn.17", "black", [] ]
+    [ "led_mac3:A", "sr1:Q2", "green", [] ],
+    [ "led_mac3:C", "bb1:bn.17", "black", [] ],
+    [ "led_mac4:A", "sr1:Q3", "green", [] ],
+    [ "led_mac4:C", "bb1:bn.14", "black", [] ]
   ],
   "dependencies": {}
 }
