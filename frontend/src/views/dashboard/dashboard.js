@@ -405,7 +405,7 @@ var OverrideManager = (function() {
     var activeOverrides = [];
     var timer = null;
 
-    var START_DELAY = 3000;
+    var START_DELAY = 15000;
 
     var SENSOR_META = {
         temp:      { icon: 'thermostat', label: 'Temperatura', unit: '\u00B0C', shared: true },
@@ -414,7 +414,7 @@ var OverrideManager = (function() {
         ph:        { icon: 'science',    label: 'pH Suelo',    unit: 'pH', shared: false }
     };
 
-    var PHASE_DURATIONS = { degrade: 21000, hold: 2000, recover: 10000 };
+    var PHASE_DURATIONS = { degrade: 105000, hold: 10000, recover: 50000 };
     var TOTAL_CYCLE = PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold + PHASE_DURATIONS.recover;
 
     var ACTUATOR_MAP = {
