@@ -731,14 +731,17 @@ def evaluar_alertas(datos):
         led_naranja.value(1)
         led_amarillo.value(0)
         led_verde.value(0)
+        shift_out_4bits(led_maceta_state | 0b10000)
     elif alerta:
         led_naranja.value(0)
         led_amarillo.value(1)
         led_verde.value(0)
+        shift_out_4bits(led_maceta_state & 0b01111)
     else:
         led_naranja.value(0)
         led_amarillo.value(0)
         led_verde.value(1)
+        shift_out_4bits(led_maceta_state & 0b01111)
 
     return critico, alerta
 
