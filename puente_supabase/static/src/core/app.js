@@ -206,7 +206,12 @@ var App = (function() {
         });
 
         Router.register('config', {
-            load: function(done) { Router.navigate('dashboard'); }
+            load: function(done) {
+                ModuleLoader.loadBundle(
+                    ['src/views/config/config.js'],
+                    []
+                ).then(function() { done(window.ConfigModule); });
+            }
         });
     }
 

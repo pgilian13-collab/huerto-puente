@@ -6,6 +6,7 @@ var SidebarComponent = (function() {
     var NAV_ITEMS = [
         { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
         { id: 'tabla', icon: 'table_chart', label: 'Tabla Sensores' },
+        { id: 'config', icon: 'settings', label: 'Configuracion' },
         { id: 'reportes', icon: 'assessment', label: 'Reportes' },
         { id: 'juego', icon: 'videogame_asset', label: 'Juego' }
     ];
