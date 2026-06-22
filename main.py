@@ -685,7 +685,8 @@ def oled_pagina_maceta(maceta_num, datos):
     if not oled:
         return
     oled.fill(0)
-    oled.text("INV-{} MAC-{}".format(MODULE_ID, str(maceta_num).zfill(2)), 0, 0)
+    mstr = str(maceta_num) if maceta_num >= 10 else '0' + str(maceta_num)
+    oled.text("INV-{} MAC-{}".format(MODULE_ID, mstr), 0, 0)
     oled.text("----------------", 0, 10)
 
     temp_str = str(int(datos['temp'])) if datos.get('temp') is not None else "--"
@@ -797,7 +798,7 @@ if oled:
     oled.show()
 time.sleep(2)
 
-oled_page = 0
+oled_page = 1
 oled_timer = 0
 last_lecturas = {}
 heartbeat_timer = 0
@@ -877,13 +878,13 @@ while True:
         oled_timer += 1
         if oled_timer >= 6:
             oled_timer = 0
-            if oled_page <= 3:
+            if oled_page <= 4:
                 oled_pagina_maceta(oled_page, last_lecturas.get(oled_page, {}))
             else:
                 oled_pagina_sistema()
             oled_page += 1
-            if oled_page > 4:
-                oled_page = 0
+            if oled_page > 5:
+                oled_page = 1
 
         time.sleep(0.5)
 
