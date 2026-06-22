@@ -40,7 +40,7 @@
     { "type": "wokwi-led", "id": "led_mac2", "top": 480, "left": -170, "attrs": { "color": "green" } },
     { "type": "wokwi-led", "id": "led_mac3", "top": 460, "left": 370, "attrs": { "color": "green" } },
     { "type": "wokwi-led", "id": "led_mac4", "top": 440, "left": 800, "attrs": { "color": "green" } },
-    { "type": "wokwi-led", "id": "led_riesgo", "top": 350, "left": 50, "attrs": { "color": "red" } },
+    { "type": "wokwi-led", "id": "led_riesgo", "top": 300, "left": 80, "attrs": { "color": "red" } },
     { "type": "wokwi-74hc595", "id": "sr1", "top": 350, "left": 50, "attrs": {} }
   ],
   "connections": [
