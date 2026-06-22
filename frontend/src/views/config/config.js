@@ -15,6 +15,7 @@ var ConfigModule = (function() {
             '<div class="config-grid">' +
             configItem('Temperatura', u.temp, 'C', 'cfg-temp') +
             configItem('Humedad Ambiente', u.humAmb, '%', 'cfg-hum') +
+            configItem('Humedad Suelo', u.humSuelo, '%', 'cfg-humsuelo') +
             configItem('pH Suelo', u.ph, 'pH', 'cfg-ph') +
             '</div>' +
             '<div style="padding:16px;text-align:center;"><button class="brutalist-btn btn-save" id="btnSaveConfig"><span class="material-icons-round">save</span> Guardar Configuracion</button></div>' +
