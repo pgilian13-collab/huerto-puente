@@ -335,15 +335,17 @@ led_amarillo = Pin(25, Pin.OUT)
 led_verde = Pin(1, Pin.OUT)
 
 # LEDs por maceta via 74HC595 shift register
+# Q0-Q3: verde por maceta (relay activo)
+# Q4-Q7: rojo por maceta (condicion critica)
 SR_DATA = Pin(2, Pin.OUT)
 SR_CLK = Pin(3, Pin.OUT)
 SR_LATCH = Pin(19, Pin.OUT)
-led_maceta_state = 0b0000
+sr_state = 0b00000000
 
-def shift_out_4bits(value):
-    """Shift 4 bits to 74HC595 (MSB first)."""
+def shift_out_8bits(value):
+    """Shift 8 bits to 74HC595 (MSB first)."""
     SR_LATCH.value(0)
-    for i in range(3, -1, -1):
+    for i in range(7, -1, -1):
         SR_CLK.value(0)
         SR_DATA.value((value >> i) & 1)
         SR_CLK.value(1)
@@ -479,14 +481,23 @@ def set_relay(maceta, nombre, estado):
     actualizar_led_maceta(maceta)
 
 def actualizar_led_maceta(maceta):
-    """Actualiza LED de la maceta via shift register 74HC595."""
-    global led_maceta_state
+    """Actualiza LED verde de la maceta via shift register."""
+    global sr_state
     activo = any(RELAYS[maceta][n].value() for n in ['bomba', 'ventilador', 'pulverizador'])
     if activo:
-        led_maceta_state |= (1 << (maceta - 1))
+        sr_state |= (1 << (maceta - 1))
     else:
-        led_maceta_state &= ~(1 << (maceta - 1))
-    shift_out_4bits(led_maceta_state)
+        sr_state &= ~(1 << (maceta - 1))
+    shift_out_8bits(sr_state)
+
+def set_led_riesgo(maceta, criticos):
+    """Actualiza LED rojo de la maceta (bit 4-7) via shift register."""
+    global sr_state
+    if criticos:
+        sr_state |= (1 << (maceta + 3))
+    else:
+        sr_state &= ~(1 << (maceta + 3))
+    shift_out_8bits(sr_state)
 
 def set_buzzer(freq, duty):
     if freq > 0:
@@ -696,7 +707,7 @@ def actualizar_oled(maceta_num, datos):
 # LOGICA ALERTAS
 # ============================================================
 
-def evaluar_alertas(datos):
+def evaluar_alertas(datos, maceta_num=None):
     temp = datos.get('temp')
     hum_amb = datos.get('hum_amb')
     hum_suelo = datos.get('hum_suelo')
@@ -727,21 +738,21 @@ def evaluar_alertas(datos):
         elif ph < 5.5 or ph > 7.5:
             alerta = True
 
+    if maceta_num is not None:
+        set_led_riesgo(maceta_num, critico)
+
     if critico:
         led_naranja.value(1)
         led_amarillo.value(0)
         led_verde.value(0)
-        shift_out_4bits(led_maceta_state | 0b10000)
     elif alerta:
         led_naranja.value(0)
         led_amarillo.value(1)
         led_verde.value(0)
-        shift_out_4bits(led_maceta_state & 0b01111)
     else:
         led_naranja.value(0)
         led_amarillo.value(0)
         led_verde.value(1)
-        shift_out_4bits(led_maceta_state & 0b01111)
 
     return critico, alerta
 
@@ -805,7 +816,7 @@ while True:
                 'hum_suelo': hum_suelo, 'ph': ph
             }
 
-            critico, alerta = evaluar_alertas(last_lecturas[m])
+            critico, alerta = evaluar_alertas(last_lecturas[m], m)
             
             acciones = lazo_cerrado.evaluar(m, last_lecturas[m])
             if acciones:
