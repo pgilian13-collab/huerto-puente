@@ -190,6 +190,7 @@ var DashboardModule = (function() {
                 var u = umbrales;
                 setConfigInput('cfg-temp', u.temp);
                 setConfigInput('cfg-hum', u.humAmb);
+                setConfigInput('cfg-humsuelo', u.humSuelo);
                 setConfigInput('cfg-ph', u.ph);
                 console.log('[CONFIG] Umbrales cargados desde Supabase');
             }
