@@ -190,6 +190,7 @@ var DashboardModule = (function() {
                 var u = umbrales;
                 setConfigInput('cfg-temp', u.temp);
                 setConfigInput('cfg-hum', u.humAmb);
+                setConfigInput('cfg-humsuelo', u.humSuelo);
                 setConfigInput('cfg-ph', u.ph);
                 console.log('[CONFIG] Umbrales cargados desde Supabase');
             }
@@ -405,7 +406,7 @@ var OverrideManager = (function() {
     var activeOverrides = [];
     var timer = null;
 
-    var START_DELAY = 3000;
+    var START_DELAY = 30000;
 
     var SENSOR_META = {
         temp:      { icon: 'thermostat', label: 'Temperatura', unit: '\u00B0C', shared: true },
@@ -414,7 +415,7 @@ var OverrideManager = (function() {
         ph:        { icon: 'science',    label: 'pH Suelo',    unit: 'pH', shared: false }
     };
 
-    var PHASE_DURATIONS = { degrade: 21000, hold: 2000, recover: 10000 };
+    var PHASE_DURATIONS = { degrade: 210000, hold: 20000, recover: 100000 };
     var TOTAL_CYCLE = PHASE_DURATIONS.degrade + PHASE_DURATIONS.hold + PHASE_DURATIONS.recover;
 
     var ACTUATOR_MAP = {
