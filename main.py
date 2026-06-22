@@ -675,10 +675,13 @@ def llamar_heartbeat():
         print("[HB] FAIL {}".format(code))
 
 # ============================================================
-# OLED
+# OLED - MULTIPLES PAGINAS
 # ============================================================
+# Pagina 0-3: MAC-1 a MAC-4 (sensores + relays)
+# Pagina 4:   Estado del sistema
 
-def actualizar_oled(maceta_num, datos):
+def oled_pagina_maceta(maceta_num, datos):
+    """Muestra sensores y relays de una maceta."""
     if not oled:
         return
     oled.fill(0)
@@ -700,6 +703,26 @@ def actualizar_oled(maceta_num, datos):
     v = "ON" if r['ventilador'].value() else "OFF"
     p = "ON" if r['pulverizador'].value() else "OFF"
     oled.text("B:{} V:{} P:{}".format(b, v, p), 0, 56)
+
+    oled.show()
+
+def oled_pagina_sistema():
+    """Muestra estado del sistema."""
+    if not oled:
+        return
+    oled.fill(0)
+    oled.text("=== SISTEMA ===", 0, 0)
+    oled.text("----------------", 0, 10)
+
+    oled.text("Modulo: INV-{}".format(MODULE_ID), 0, 22)
+
+    wlan = network.WLAN(network.STA_IF)
+    if wlan.isconnected():
+        ip = wlan.ifconfig()[0]
+        oled.text("WiFi: OK", 0, 36)
+        oled.text("IP: {}".format(ip[:12]), 0, 46)
+    else:
+        oled.text("WiFi: DESCONECTADO", 0, 36)
 
     oled.show()
 
@@ -774,7 +797,7 @@ if oled:
     oled.show()
 time.sleep(2)
 
-oled_mac = 1
+oled_page = 0
 oled_timer = 0
 last_lecturas = {}
 heartbeat_timer = 0
@@ -852,12 +875,15 @@ while True:
             print("[SKIP] Sin WiFi")
 
         oled_timer += 1
-        if oled_timer >= 3:
+        if oled_timer >= 6:
             oled_timer = 0
-            actualizar_oled(oled_mac, last_lecturas.get(oled_mac, {}))
-            oled_mac += 1
-            if oled_mac > 4:
-                oled_mac = 1
+            if oled_page <= 3:
+                oled_pagina_maceta(oled_page, last_lecturas.get(oled_page, {}))
+            else:
+                oled_pagina_sistema()
+            oled_page += 1
+            if oled_page > 4:
+                oled_page = 0
 
         time.sleep(0.5)
 
