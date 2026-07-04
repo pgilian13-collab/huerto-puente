@@ -24,11 +24,111 @@ ESP32 (Wokwi) --> HTTP POST /api/sync --> Bridge (Render) --> Supabase (PostgreS
 Frontend (Render static) <--- Supabase Realtime / REST ---> Browser
 ```
 
+## Flujo Completo del Sistema
+
+### 1. Flujo de datos sensores (ESP32 -> Frontend)
+```
+Cada 0.5s:
+  ESP32 lee DHT22 (temp, hum_amb) + MUX (4x hum_suelo + 4x ph) = 10 sensores
+  Cada 7s (sync_counter >= 14):
+    ESP32 POST /api/sync {device: 1, sensors: {0: 25.3, 1: 65.1, ...}, pending: true}
+    Bridge recibe, batch inserta en monitoreo_lecturas (1 POST a Supabase)
+    Bridge consulta commands + overrides pendientes (en paralelo)
+    Bridge responde: {ok, sensors_written, commands: [...], overrides: [...]}
+    ESP32 aplica commands (relays) y overrides (3 fases)
+  Frontend (cada 2s via Realtime o polling):
+    Consulta monitoreo_lecturas REST -> actualiza sensores + grafico
+```
+
+### 2. Flujo de simulacion (Frontend -> ESP32)
+```
+1. Usuario hace clic en boton SEQUIA/pH/TEMP/HUMEDAD en dashboard
+2. Frontend valida: si valor dentro de umbrales configurados, RECHAZA con toast
+3. Frontend POST /api/simulacion/alerta al Bridge
+4. Bridge inserta en tabla simulacion_alertas (activa=true)
+5. En el proximo cycle del ESP32 (cada 7s), piggyback lee overrides
+6. ESP32 activa SensorOverride:
+   a. DEGRADING (21s): valor fisico -> valor critico (7 pasos x 3s)
+   b. HOLDING (2s): se mantiene en critico
+   c. RECOVERING (60s): critico -> setpoint ideal (20 pasos x 3s)
+   d. TTL: 120s, luego expira
+7. Frontend OverrideManager refleja el ciclo localmente:
+   - WAITING 30s -> DEGRADING 210s -> HOLDING 20s -> RECOVERING 100s (x10 del ESP32)
+   - Actuadores visuales ON solo durante RECOVERING
+```
+
+### 3. Flujo de actuadores (Frontend -> ESP32)
+```
+1. Usuario hace clic en boton ON/OFF de actuador en dashboard
+2. Frontend POST /api/comando al Bridge
+3. Bridge inserta en control_actuadores (estado_solicitado=PENDIENTE)
+4. En proximo piggyback, ESP32 recibe commands
+5. ESP32 ejecuta: set_relay(maceta, nombre, estado)
+6. Bridge marca como EJECUTADO (batch PATCH)
+```
+
+### 4. Flujo de lazo cerrado (automatico, en ESP32)
+```
+Cada ciclo, por cada maceta:
+  evaluar_alertas(datos, maceta):
+    - Si temp > 35 o < 10 -> critico (LED naranja ON, LED rojo maceta ON)
+    - Si hum_suelo < 30 -> critico
+    - Si hum_amb > 85 o < 20 -> critico
+    - Si ph < 4.5 o > 9.0 -> critico
+    - Si no hay critico pero hay alerta -> LED amarillo
+    - Si todo normal -> LED verde
+
+  lazo_cerrado.evaluar(maceta, datos):
+    - Bomba ON si hum_suelo < 30, OFF si > 55
+    - Ventilador ON si temp > 35 o hum_amb > 85, OFF si temp < 30 y hum_amb < 75
+    - Pulverizador ON si hum_amb < 20 o temp > 35, OFF si hum_amb > 50
+```
+
+### 5. Flujo de umbrales (Configuracion)
+```
+Frontend (config.js o dashboard.js):
+  1. Al cargar, lee configuracion de Supabase (tabla configuracion)
+  2. Si no existe fila, usa defaults: temp 15-30, humAmb 30-85, humSuelo 40-80, ph 5.5-7.5
+  3. Usuario modifica valores -> clic Guardar
+  4. Frontend upsert a Supabase (INSERT si no existe, PATCH si existe)
+  5. Tambien guarda en localStorage como fallback
+  6. Valores se usan para: validar simulacion +OverrideManager colores
+```
+
+## API Keys y Seguridad
+
+### Supabase
+- **Service Key** (usada en ESP32 + Bridge): tiene permisos completos (INSERT, SELECT, UPDATE, DELETE)
+- **Anon Key** (usada en Frontend): solo puede SELECT (lectura)
+- El ESP32 usa la Service Key directamente porque no tiene Supabase Auth
+- El Frontend usa la Service Key via REST API (sin RLS habilitado en tablas)
+
+### Bridge
+- **BRIDGE_SECRET_KEY** = `huerto-ccss-2026`
+- Todos los POST al Bridge requieren header `X-Bridge-Key: huerto-ccss-2026`
+- GET /ping no requiere key (para heartbeat del ESP32)
+- GET /health no requiere key (para monitoreo)
+- Frontend envia la key en `ApiService.bridgePost()` automaticamente
+
+### Wokwi
+- No necesita keys, es simulador local
+- WiFi: "Wokwi-GUEST" sin password
+- DNS externo resuelto via proxy de Wokwi
+
+### Render
+- Variables de entorno en dashboard de Render:
+  - `SUPABASE_URL`
+  - `SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_KEY`
+  - `BRIDGE_SECRET_KEY`
+  - No tienen `requirements.txt` commit — Render lo detecta automaticamente de `pyproject.toml` o `requirements.txt`
+
 ## Base de datos — Tablas clave
 
 ### monitoreo_lecturas
 - `id` (serial), `sensor_id` (int), `valor_lectura` (float), `fecha_hora` (timestamptz default now())
 - 50 sensores, IDs 0-49
+- Se insertan batch (10 filas por POST)
 
 ### sensores
 - 50 registros, formula: `base = (dispositivo_id - 1) * 10`
@@ -39,12 +139,16 @@ Frontend (Render static) <--- Supabase Realtime / REST ---> Browser
 
 ### simulacion_alertas
 - `id`, `tipo_alerta`, `sensor_tipo`, `valor_forzado`, `maceta_numero` (0=compartido, 1-4=maceta), `dispositivo_id`, `activa` (bool), `created_at`
+- `activa=true` = override activo en ESP32
+- Cleanup automatico despues de 300s
 
 ### control_actuadores
 - `id`, `dispositivo_id`, `nombre_actuador`, `pin_conexion`, `estado_solicitado` (PENDIENTE/EJECUTADO), `fecha_solicitud`, `fecha_ejecucion`
+- Se marca EJECUTADO despues de que ESP32 lo recibe via piggyback
 
 ### configuracion
 - `id`, `dispositivo_id`, `umbrales` (JSONB: `{temp:{min,max}, humAmb:{min,max}, humSuelo:{min,max}, ph:{min,max}}`)
+- 1 fila por dispositivo, upsert on save
 
 ### dispositivos
 - 5 registros (IDs 1-5)
@@ -202,13 +306,3 @@ frontend/
 7. **MicroPython no tiene str.zfill()** — usar concatenacion manual
 8. **PCF8574 no esta en Wokwi** — solo funciona en hardware real
 9. **`leer_suelo()`/`leer_ph()` retornan None** si pin flotante (raw <200 o >3800)
-
-## Commits recientes clave
-- `5df7da6` — Sidebar config link + route fix
-- `6a25f5d` — view-config HTML section
-- `d9e9b1c` — OLED zfill fix
-- `45732d8` — Shift register pin names
-- `e129779` — Sensor None detection
-- `843b050` — Simulation timing x10
-- `ba9ac75` — Config humSuelo UI
-- `d59af97` — Config humSuelo load from Supabase
