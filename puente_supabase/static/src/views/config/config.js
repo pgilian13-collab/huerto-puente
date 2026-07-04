@@ -3,8 +3,24 @@
 // ============================================================
 
 var ConfigModule = (function() {
-    function init() { render(); }
+    function init() {
+        loadFromSupabase().then(function() { render(); });
+    }
     function destroy() {}
+
+    function loadFromSupabase() {
+        var inv = AppState.get('currentInv') || 0;
+        var deviceId = inv + 1;
+        return ApiService.sbQuery('configuracion', 'dispositivo_id=eq.' + deviceId).then(function(rows) {
+            if (rows && rows.length > 0 && rows[0].umbrales) {
+                AppState.set('umbrales', rows[0].umbrales);
+                AppState.persistUmbrales();
+                console.log('[CONFIG] Umbrales cargados desde Supabase');
+            }
+        }).catch(function(e) {
+            console.error('[CONFIG] Error cargando umbrales:', e);
+        });
+    }
 
     function render() {
         var el = document.getElementById('view-config');
@@ -13,7 +29,7 @@ var ConfigModule = (function() {
 
         el.innerHTML = '<div class="panel"><div class="panel-header"><span class="material-icons-round">settings</span><h3>Configuracion de Umbrales</h3><div class="panel-tag">SYS//CONFIG</div></div>' +
             '<div class="config-grid">' +
-            configItem('Temperatura', u.temp, 'C', 'cfg-temp', 'thermostat', '#ef4444') +
+            configItem('Temperatura', u.temp, '\u00B0C', 'cfg-temp', 'thermostat', '#ef4444') +
             configItem('Humedad Ambiente', u.humAmb, '%', 'cfg-hum', 'air', '#3b82f6') +
             configItem('Humedad Suelo', u.humSuelo, '%', 'cfg-humsuelo', 'water_drop', '#22c55e') +
             configItem('pH Suelo', u.ph, 'pH', 'cfg-ph', 'science', '#f59e0b') +
@@ -21,7 +37,8 @@ var ConfigModule = (function() {
             '<div style="padding:16px;text-align:center;"><button class="brutalist-btn btn-save" id="btnSaveConfig"><span class="material-icons-round">save</span> Guardar Configuracion</button></div>' +
             '</div>';
 
-        document.getElementById('btnSaveConfig').addEventListener('click', save);
+        var btn = document.getElementById('btnSaveConfig');
+        if (btn) btn.addEventListener('click', save);
     }
 
     function configItem(label, range, unit, prefix, icon, color) {
@@ -35,16 +52,44 @@ var ConfigModule = (function() {
             '</div>';
     }
 
+    function val(id, fallback) {
+        var el = document.getElementById(id);
+        return el ? parseFloat(el.value) : fallback;
+    }
+
     function save() {
         var umbrales = {
-            temp: { min: parseFloat(document.getElementById('cfg-temp-min').value), max: parseFloat(document.getElementById('cfg-temp-max').value) },
-            humAmb: { min: parseFloat(document.getElementById('cfg-hum-min').value), max: parseFloat(document.getElementById('cfg-hum-max').value) },
-            humSuelo: { min: parseFloat(document.getElementById('cfg-humsuelo-min') ? document.getElementById('cfg-humsuelo-min').value : 40), max: parseFloat(document.getElementById('cfg-humsuelo-max') ? document.getElementById('cfg-humsuelo-max').value : 80) },
-            ph: { min: parseFloat(document.getElementById('cfg-ph-min').value), max: parseFloat(document.getElementById('cfg-ph-max').value) }
+            temp: { min: val('cfg-temp-min', 15), max: val('cfg-temp-max', 30) },
+            humAmb: { min: val('cfg-hum-min', 30), max: val('cfg-hum-max', 85) },
+            humSuelo: { min: val('cfg-humsuelo-min', 40), max: val('cfg-humsuelo-max', 80) },
+            ph: { min: val('cfg-ph-min', 5.5), max: val('cfg-ph-max', 7.5) }
         };
         AppState.set('umbrales', umbrales);
         AppState.persistUmbrales();
         EventBus.emit('config:saved', umbrales);
+
+        var inv = AppState.get('currentInv') || 0;
+        var deviceId = inv + 1;
+        var payload = { dispositivo_id: deviceId, umbrales: umbrales, updated_at: new Date().toISOString() };
+        ApiService.sbQuery('configuracion', 'dispositivo_id=eq.' + deviceId).then(function(existing) {
+            if (existing && existing.length > 0) {
+                return ApiService.sbPatch('configuracion', existing[0].id, payload);
+            } else {
+                return ApiService.sbInsert('configuracion', { dispositivo_id: deviceId, umbrales: umbrales });
+            }
+        }).then(function() {
+            console.log('[CONFIG] Umbrales guardados en Supabase');
+        }).catch(function(e) {
+            console.error('[CONFIG] Error guardando en Supabase:', e);
+        });
+
+        var btn = document.getElementById('btnSaveConfig');
+        if (btn) {
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<span class="material-icons-round">check</span> Guardado';
+            btn.style.background = '#16a34a';
+            setTimeout(function() { btn.innerHTML = orig; btn.style.background = ''; }, 2000);
+        }
     }
 
     return { init: init, destroy: destroy };

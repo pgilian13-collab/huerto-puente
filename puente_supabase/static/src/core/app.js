@@ -233,8 +233,9 @@ var App = (function() {
     function initSensorModal() {
         var modal = document.getElementById('sensorModal');
         var closeBtn = document.getElementById('sensorModalClose');
+        if (!modal) return;
         if (closeBtn) closeBtn.addEventListener('click', function() { modal.classList.remove('active'); });
-        if (modal) modal.addEventListener('click', function(e) {
+        modal.addEventListener('click', function(e) {
             if (e.target === modal) modal.classList.remove('active');
         });
 

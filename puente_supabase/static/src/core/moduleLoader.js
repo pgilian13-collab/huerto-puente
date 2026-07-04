@@ -9,6 +9,7 @@ var ModuleLoader = (function() {
     var loaded = {};
     var loading = {};
     var basePath = '';
+    var CACHE_BUST = '?v=7';
 
     function setBase(path) {
         basePath = path;
@@ -18,16 +19,17 @@ var ModuleLoader = (function() {
         if (loaded[src]) return Promise.resolve();
         if (loading[src]) return loading[src];
 
+        var url = basePath + src + (src.indexOf('?') === -1 ? CACHE_BUST : '');
         loading[src] = new Promise(function(resolve, reject) {
             var script = document.createElement('script');
-            script.src = basePath + src;
+            script.src = url;
             script.onload = function() {
                 loaded[src] = true;
                 resolve();
             };
             script.onerror = function() {
-                console.error('[ModuleLoader] Failed to load:', src);
-                reject(new Error('Failed to load ' + src));
+                console.error('[ModuleLoader] Failed to load:', url);
+                reject(new Error('Failed to load ' + url));
             };
             document.head.appendChild(script);
         });
@@ -38,16 +40,17 @@ var ModuleLoader = (function() {
         if (loaded[src]) return Promise.resolve();
         if (loading[src]) return loading[src];
 
+        var url = basePath + src + (src.indexOf('?') === -1 ? CACHE_BUST : '');
         loading[src] = new Promise(function(resolve, reject) {
             var link = document.createElement('link');
             link.rel = 'stylesheet';
-            link.href = basePath + src;
+            link.href = url;
             link.onload = function() {
                 loaded[src] = true;
                 resolve();
             };
             link.onerror = function() {
-                console.error('[ModuleLoader] Failed to load CSS:', src);
+                console.error('[ModuleLoader] Failed to load CSS:', url);
                 resolve(); // CSS failure is non-blocking
             };
             document.head.appendChild(link);

@@ -59,9 +59,6 @@ var SensorService = (function() {
         var macetaIds = getMacetaSensorIds(deviceId, maceta);
         var ids = [shared.temp, shared.hum_amb, macetaIds.hum_suelo, macetaIds.ph];
         var params = 'sensor_id=in.(' + ids.join(',') + ')&order=fecha_hora.desc&limit=' + (limit * 4);
-        if (connectionStartTime) {
-            params += '&fecha_hora=gte.' + connectionStartTime;
-        }
         return ApiService.sbQuery('monitoreo_lecturas', params).then(function(rows) {
             return rows || [];
         });

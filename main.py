@@ -348,10 +348,17 @@ def shift_out_8bits(value):
     for i in range(7, -1, -1):
         SR_CLK.value(0)
         SR_DATA.value((value >> i) & 1)
+        time.sleep_us(5)
         SR_CLK.value(1)
+        time.sleep_us(5)
     SR_LATCH.value(0)
+    time.sleep_us(5)
     SR_LATCH.value(1)
+    time.sleep_us(5)
     SR_LATCH.value(0)
+
+shift_out_8bits(sr_state)
+print("[SR] 74HC595 init OK, state=0b{:08b}".format(sr_state))
 
 # OLED
 oled = None
@@ -463,7 +470,6 @@ def leer_dht():
             pass
         time.sleep_ms(200)
     return 25.0, 65.0
-    return None, None
 
 # ============================================================
 # FUNCIONES RELAYS
@@ -489,6 +495,7 @@ def actualizar_led_maceta(maceta):
     else:
         sr_state &= ~(1 << (maceta - 1))
     shift_out_8bits(sr_state)
+    print("[SR] MAC-{} green={} sr=0b{:08b}".format(maceta, "ON" if activo else "OFF", sr_state))
 
 def set_led_riesgo(maceta, criticos):
     """Actualiza LED rojo de la maceta (bit 4-7) via shift register."""
@@ -498,6 +505,7 @@ def set_led_riesgo(maceta, criticos):
     else:
         sr_state &= ~(1 << (maceta + 3))
     shift_out_8bits(sr_state)
+    print("[SR] MAC-{} red={} sr=0b{:08b}".format(maceta, "ON" if criticos else "OFF", sr_state))
 
 def set_buzzer(freq, duty):
     if freq > 0:
@@ -559,7 +567,8 @@ def _http_get(path, timeout=8):
                 headers={"X-Bridge-Key": BRIDGE_KEY},
                 timeout=timeout
             )
-            if resp.status_code == 200:
+            code = resp.status_code
+            if code == 200:
                 data = resp.json()
                 resp.close()
                 resp = None
@@ -568,7 +577,7 @@ def _http_get(path, timeout=8):
             resp.close()
             resp = None
             gc.collect()
-            return resp.status_code, None
+            return code, None
         except Exception as e:
             print("[HTTP] GET {} intento{}: {}".format(path, intento, e))
             if resp:

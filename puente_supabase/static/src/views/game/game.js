@@ -221,6 +221,7 @@ HuertoChallenge.prototype.respondToThreat = function(actionType) {
     if (actionType === 'ventilador' && this.energy < 10) return;
     if (actionType === 'pulverizador' && this.water < 10) return;
     if (actionType === 'ph' && (this.energy < 5 || this.water < 5)) return;
+    if (actionType === 'proteger' && this.energy < 8) return;
 
     clearTimeout(this.threatTimeout);
     this.totalTaps++;
@@ -545,15 +546,19 @@ HuertoChallenge.prototype.showRoundInfo = function() {
             '<div class="game-msg-sub">Combos correctos dan x' + (1 + Math.floor(3/3)*0.5).toFixed(1) + '+ multiplicador</div>' +
             '<button class="brutalist-btn game-btn" onclick="huertoGame.startRound()">Iniciar Ronda</button>';
     }
-    document.getElementById('game-actions').style.display = 'none';
-    document.getElementById('game-threat').style.display = 'none';
+    var actionsEl = document.getElementById('game-actions');
+    var threatEl = document.getElementById('game-threat');
+    if (actionsEl) actionsEl.style.display = 'none';
+    if (threatEl) threatEl.style.display = 'none';
 };
 
 HuertoChallenge.prototype.showRoundStart = function(round) {
     var el = document.getElementById('game-status');
     if (el) el.innerHTML = '<div class="game-msg">Ronda ' + (this.currentRound + 1) + ': ' + round.name + ' - EN CURSO</div>';
-    document.getElementById('game-actions').style.display = 'grid';
-    document.getElementById('game-threat').style.display = 'none';
+    var actionsEl = document.getElementById('game-actions');
+    var threatEl = document.getElementById('game-threat');
+    if (actionsEl) actionsEl.style.display = 'grid';
+    if (threatEl) threatEl.style.display = 'none';
 };
 
 HuertoChallenge.prototype.showThreat = function(threat) {
@@ -588,8 +593,10 @@ HuertoChallenge.prototype.showActionFeedback = function(points, correct, combo) 
 };
 
 HuertoChallenge.prototype.showRoundResult = function(roundScore) {
-    document.getElementById('game-actions').style.display = 'none';
-    document.getElementById('game-threat').style.display = 'none';
+    var actionsEl = document.getElementById('game-actions');
+    var threatEl = document.getElementById('game-threat');
+    if (actionsEl) actionsEl.style.display = 'none';
+    if (threatEl) threatEl.style.display = 'none';
     var el = document.getElementById('game-status');
     if (!el) return;
 
@@ -623,8 +630,10 @@ HuertoChallenge.prototype.showRoundResult = function(roundScore) {
 
 HuertoChallenge.prototype.showFinalResult = function() {
     this.playing = false;
-    document.getElementById('game-actions').style.display = 'none';
-    document.getElementById('game-threat').style.display = 'none';
+    var actionsEl = document.getElementById('game-actions');
+    var threatEl = document.getElementById('game-threat');
+    if (actionsEl) actionsEl.style.display = 'none';
+    if (threatEl) threatEl.style.display = 'none';
     var el = document.getElementById('game-status');
     if (!el) return;
 

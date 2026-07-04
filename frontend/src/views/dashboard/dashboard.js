@@ -5,6 +5,7 @@
 
 var DashboardModule = (function() {
     var chart = null;
+    var chartRefreshTimer = null;
 
     function init() {
         render();
@@ -16,6 +17,7 @@ var DashboardModule = (function() {
     function destroy() {
         EventBus.off('sensors:updated', onSensorsUpdated);
         EventBus.off('maceta:selected', onMacetaChanged);
+        if (chartRefreshTimer) { clearTimeout(chartRefreshTimer); chartRefreshTimer = null; }
         if (chart) { chart.destroy(); chart = null; }
     }
 
@@ -104,6 +106,7 @@ var DashboardModule = (function() {
         html += '<div class="config-grid">';
         html += configItem('Temperatura', u.temp, 'C', 'cfg-temp');
         html += configItem('Humedad Ambiente', u.humAmb, '%', 'cfg-hum');
+        html += configItem('Humedad Suelo', u.humSuelo, '%', 'cfg-humsuelo');
         html += configItem('pH Suelo', u.ph, 'pH', 'cfg-ph');
         html += '</div>';
         html += '<div style="padding:16px;text-align:center;"><button class="brutalist-btn btn-save" id="btnSaveConfig"><span class="material-icons-round">save</span> Guardar Configuracion</button></div>';
@@ -217,6 +220,8 @@ var DashboardModule = (function() {
 
     function onSensorsUpdated(data) {
         updateSensors(data);
+        if (chartRefreshTimer) clearTimeout(chartRefreshTimer);
+        chartRefreshTimer = setTimeout(function() { loadChartData(); }, 2000);
     }
 
     function onMacetaChanged() {
@@ -263,21 +268,80 @@ var DashboardModule = (function() {
         var macetaIds = SensorService.getMacetaSensorIds(inv + 1, mac);
 
         var temporal = {};
+        var timestamps = [];
         if (rows && rows.length > 0) {
             rows.forEach(function(l) {
-            var fecha = new Date(l.fecha_hora);
-            var ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
-            if (!temporal[ts]) temporal[ts] = {};
-            if (l.sensor_id === shared.temp) temporal[ts].temp = l.valor_lectura;
-            if (l.sensor_id === shared.hum_amb) temporal[ts].humAmb = l.valor_lectura;
-            if (l.sensor_id === macetaIds.hum_suelo) temporal[ts].humSuelo = l.valor_lectura;
-            if (l.sensor_id === macetaIds.ph) temporal[ts].ph = l.valor_lectura;
-        });
+                var fecha = new Date(l.fecha_hora);
+                var ts = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Lima' });
+                if (!temporal[ts]) {
+                    temporal[ts] = {};
+                    timestamps.push({ ts: ts, date: fecha });
+                }
+                if (l.sensor_id === shared.temp) temporal[ts].temp = l.valor_lectura;
+                if (l.sensor_id === shared.hum_amb) temporal[ts].humAmb = l.valor_lectura;
+                if (l.sensor_id === macetaIds.hum_suelo) temporal[ts].humSuelo = l.valor_lectura;
+                if (l.sensor_id === macetaIds.ph) temporal[ts].ph = l.valor_lectura;
+            });
         }
 
-        var labels = Object.keys(temporal).reverse();
+        timestamps.sort(function(a, b) { return a.date - b.date; });
+        var labels = timestamps.map(function(t) { return t.ts; });
 
-        chart = new Chart(canvas, {
+        if (labels.length === 0) {
+            var ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#334155';
+            ctx.font = '14px JetBrains Mono';
+            ctx.textAlign = 'center';
+            ctx.fillText('Sin datos disponibles', canvas.width / 2, canvas.height / 2);
+            ctx.font = '11px JetBrains Mono';
+            ctx.fillStyle = '#64748b';
+            ctx.fillText('Esperando datos del ESP32...', canvas.width / 2, canvas.height / 2 + 24);
+            return;
+        }
+
+        // Gap detection: find regions with no data for > GAP_THRESHOLD ms
+        var GAP_THRESHOLD = 30000;
+        var gapRegions = [];
+        for (var i = 1; i < timestamps.length; i++) {
+            var diff = timestamps[i].date - timestamps[i - 1].date;
+            if (diff > GAP_THRESHOLD) {
+                gapRegions.push({ start: i - 1, end: i });
+            }
+        }
+
+        // Build gap plugin data
+        var gapPlugin = null;
+        if (gapRegions.length > 0) {
+            gapPlugin = {
+                id: 'gapHighlight',
+                beforeDraw: function(chart) {
+                    var ctx = chart.ctx;
+                    var xScale = chart.scales.x;
+                    var yScale = chart.scales.y;
+                    gapRegions.forEach(function(gap) {
+                        var x1 = xScale.getPixelForValue(gap.start);
+                        var x2 = xScale.getPixelForValue(gap.end);
+                        ctx.save();
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+                        ctx.fillRect(x1, yScale.top, x2 - x1, yScale.bottom - yScale.top);
+                        ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+                        ctx.lineWidth = 1;
+                        ctx.setLineDash([4, 4]);
+                        ctx.beginPath();
+                        ctx.moveTo(x1, yScale.top);
+                        ctx.lineTo(x1, yScale.bottom);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(x2, yScale.top);
+                        ctx.lineTo(x2, yScale.bottom);
+                        ctx.stroke();
+                        ctx.restore();
+                    });
+                }
+            };
+        }
+
+        var chartConfig = {
             type: 'line',
             data: {
                 labels: labels,
@@ -290,7 +354,8 @@ var DashboardModule = (function() {
                         tension: 0.4,
                         fill: true,
                         pointRadius: 2,
-                        borderWidth: 2
+                        borderWidth: 2,
+                        spanGaps: false
                     },
                     {
                         label: 'Humedad Suelo (%)',
@@ -300,7 +365,8 @@ var DashboardModule = (function() {
                         tension: 0.4,
                         fill: true,
                         pointRadius: 2,
-                        borderWidth: 2
+                        borderWidth: 2,
+                        spanGaps: false
                     },
                     {
                         label: 'Humedad Ambiente (%)',
@@ -310,7 +376,8 @@ var DashboardModule = (function() {
                         tension: 0.4,
                         fill: true,
                         pointRadius: 2,
-                        borderWidth: 2
+                        borderWidth: 2,
+                        spanGaps: false
                     },
                     {
                         label: 'pH',
@@ -321,6 +388,7 @@ var DashboardModule = (function() {
                         fill: true,
                         pointRadius: 2,
                         borderWidth: 2,
+                        spanGaps: false,
                         yAxisID: 'y1'
                     }
                 ]
@@ -354,15 +422,26 @@ var DashboardModule = (function() {
                     }
                 }
             }
-        });
+        };
+
+        if (gapPlugin) {
+            chartConfig.plugins = [gapPlugin];
+        }
+
+        chart = new Chart(canvas, chartConfig);
+    }
+
+    function val(id, fallback) {
+        var el = document.getElementById(id);
+        return el ? parseFloat(el.value) : fallback;
     }
 
     function saveConfig() {
         var umbrales = {
-            temp: { min: parseFloat(document.getElementById('cfg-temp-min').value), max: parseFloat(document.getElementById('cfg-temp-max').value) },
-            humAmb: { min: parseFloat(document.getElementById('cfg-hum-min').value), max: parseFloat(document.getElementById('cfg-hum-max').value) },
-            humSuelo: { min: 40, max: 80 },
-            ph: { min: parseFloat(document.getElementById('cfg-ph-min').value), max: parseFloat(document.getElementById('cfg-ph-max').value) }
+            temp: { min: val('cfg-temp-min', 15), max: val('cfg-temp-max', 30) },
+            humAmb: { min: val('cfg-hum-min', 30), max: val('cfg-hum-max', 85) },
+            humSuelo: { min: val('cfg-humsuelo-min', 40), max: val('cfg-humsuelo-max', 80) },
+            ph: { min: val('cfg-ph-min', 5.5), max: val('cfg-ph-max', 7.5) }
         };
         AppState.set('umbrales', umbrales);
         AppState.persistUmbrales();
