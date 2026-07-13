@@ -115,9 +115,24 @@ var App = (function() {
             var isOn = currentBtn && currentBtn.classList.contains('on');
             var newEstado = isOn ? 'OFF' : 'ON';
 
+            // Show PENDIENTE status
+            var modeEl = document.getElementById(actuatorName + '-mode');
+            if (modeEl) { modeEl.textContent = 'Esperando...'; modeEl.style.color = '#FFD600'; }
+
             ActuatorService.toggleActuador(act.id, act.nombre, act.pin_conexion, newEstado, deviceId).then(function(res) {
                 if (res && res.success) {
+                    // Show ENVIADO status
+                    if (modeEl) { modeEl.textContent = 'Enviado'; modeEl.style.color = '#00BF'; }
                     console.log('[ACT] ' + actuatorName + ' -> ' + newEstado);
+                    // Clear after 3s
+                    setTimeout(function() {
+                        if (modeEl) { modeEl.textContent = 'MANUAL'; modeEl.style.color = ''; }
+                    }, 3000);
+                } else {
+                    if (modeEl) { modeEl.textContent = 'Error'; modeEl.style.color = '#FF4545'; }
+                    setTimeout(function() {
+                        if (modeEl) { modeEl.textContent = 'MANUAL'; modeEl.style.color = ''; }
+                    }, 3000);
                 }
             });
         });

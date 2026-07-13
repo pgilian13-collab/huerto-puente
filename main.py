@@ -590,6 +590,22 @@ def _http_post(path, data, timeout=10):
                 time.sleep(0.5)
     return 0, None
 
+def confirmar_comando(cmd_id, dispositivo_id, resultado, estado_final, mensaje_error=None):
+    """Confirma al bridge que un comando fue ejecutado (o falló)."""
+    payload = {
+        "comando_id": cmd_id,
+        "dispositivo_id": dispositivo_id,
+        "resultado": resultado,
+        "estado_final": estado_final,
+    }
+    if mensaje_error:
+        payload["mensaje_error"] = mensaje_error
+    code, body = _http_post("/api/comando/confirmar", payload, timeout=5)
+    if code and code < 300:
+        print("[CONFIRM] cmd={} -> {}".format(cmd_id, resultado))
+    else:
+        print("[CONFIRM] ERROR cmd={} code={}".format(cmd_id, code))
+
 def _http_get(path, timeout=8):
     """GET con retry. Retorna (status_code, json_dict) o (0, None)."""
     gc.collect()
@@ -672,6 +688,7 @@ def sync_with_bridge(lecturas_db):
         estado = cmd.get("estado_solicitado", "OFF")
         actuador_id = cmd.get("actuador_id")
         nombre = cmd.get("nombre_actuador", "")
+        exito = False
 
         # FLUJO PRINCIPAL: por actuador_id (ID de Supabase)
         if actuador_id and actuador_id in ACTUADOR_MAP:
@@ -681,23 +698,33 @@ def sync_with_bridge(lecturas_db):
             else:
                 set_relay(maceta, relay_name, estado)
             print("[CMD] ID={} {} MAC-{} -> {}".format(actuador_id, relay_name, maceta, estado))
+            exito = True
         else:
             # LEGACY: compatibilidad por nombre (temporal)
             relay_name = normalize_actuador_name(nombre)
             if relay_name == 'buzzer':
                 set_buzzer(800 if estado == "ON" else 0, 10 if estado == "ON" else 0)
                 print("[CMD-LEGACY] {} -> {}".format(nombre, estado))
+                exito = True
             elif relay_name:
                 pin_str = cmd.get("pin_conexion", "")
                 for m in range(1, 5):
                     if pin_str in RELAYS[m]:
                         set_relay(m, relay_name, estado)
                         print("[CMD-LEGACY] {} MAC-{} -> {}".format(nombre, m, estado))
+                        exito = True
                         break
-                else:
+                if not exito:
                     print("[CMD-LEGACY] No se encontro pin {} para {}".format(pin_str, nombre))
             else:
                 print("[CMD] Actuador desconocido: id={} nombre={}".format(actuador_id, nombre))
+
+        # Confirmar resultado al bridge
+        if cmd_id:
+            if exito:
+                confirmar_comando(cmd_id, MODULE_ID, "OK", estado)
+            else:
+                confirmar_comando(cmd_id, MODULE_ID, "ERROR", estado, "Actuador no encontrado")
 
     # Process overrides from response
     overrides = resp.get("overrides", [])

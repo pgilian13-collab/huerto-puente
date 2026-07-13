@@ -188,7 +188,7 @@ async def sync_device(data: dict):
                     f"{SUPABASE_URL}/rest/v1/control_actuadores",
                     params={
                         "dispositivo_id": f"eq.{device_id}",
-                        "estado_actual": "eq.PENDIENTE",
+                        "estado_actual": "in.(PENDIENTE,ENVIADO)",
                         "order": "fecha_solicitud.asc",
                     },
                     headers=HEADERS_SERVICE,
@@ -223,7 +223,7 @@ async def sync_device(data: dict):
         commands = raw_cmds
         overrides = raw_overrides
 
-        # Batch mark all commands as executed (single PATCH)
+        # Batch mark all commands as ENVIADO (sent, pending confirmation)
         cmd_ids = [cmd.get("id") for cmd in raw_cmds if cmd.get("id")]
         if cmd_ids:
             id_list = ",".join(str(cid) for cid in cmd_ids)
@@ -231,8 +231,8 @@ async def sync_device(data: dict):
                 await client.patch(
                     f"{SUPABASE_URL}/rest/v1/control_actuadores?id=in.({id_list})",
                     json={
-                        "estado_actual": "EJECUTADO",
-                        "fecha_ejecucion": datetime.now(timezone.utc).isoformat(),
+                        "estado_actual": "ENVIADO",
+                        "fecha_envio": datetime.now(timezone.utc).isoformat(),
                     },
                     headers={
                         **HEADERS_SERVICE,
@@ -240,7 +240,21 @@ async def sync_device(data: dict):
                     },
                 )
             except Exception as e:
-                print(f"[SYNC] Batch mark executed error: {e}")
+                print(f"[SYNC] Batch mark ENVIADO error: {e}")
+
+        # Expire commands ENVIADO >60s without confirmation
+        try:
+            cutoff = (datetime.now(timezone.utc) - __import__('datetime').timedelta(seconds=60)).isoformat()
+            await client.patch(
+                f"{SUPABASE_URL}/rest/v1/control_actuadores?estado_actual=eq.ENVIADO&fecha_envio=lt.{cutoff}",
+                json={
+                    "estado_actual": "EXPIRADO",
+                    "mensaje_error": "Sin confirmación del dispositivo en 60s",
+                },
+                headers={**HEADERS_SERVICE, "Prefer": "return=minimal"},
+            )
+        except Exception as e:
+            print(f"[SYNC] Expire check error: {e}")
 
         # Check if any override is older than 5 minutes
         now = datetime.now(timezone.utc)
@@ -298,13 +312,13 @@ async def recibir_comando_frontend(data: dict):
 
 @app.get("/api/comandos/{dispositivo_id}")
 async def obtener_comandos(dispositivo_id: int):
-    """Obtiene comandos pendientes para un ESP32"""
+    """Obtiene comandos pendientes o ENVIADO para un ESP32"""
     try:
         resp = await client.get(
             f"{SUPABASE_URL}/rest/v1/control_actuadores",
             params={
                 "dispositivo_id": f"eq.{dispositivo_id}",
-                "estado_actual": "eq.PENDIENTE",
+                "estado_actual": "in.(PENDIENTE,ENVIADO)",
                 "order": "fecha_solicitud.asc",
             },
             headers=HEADERS_SERVICE,
@@ -321,16 +335,94 @@ async def obtener_comandos(dispositivo_id: int):
 
 @app.patch("/api/comando/{cmd_id}/ejecutado", dependencies=[Depends(verify_bridge_key)])
 async def marcar_ejecutado(cmd_id: int):
-    """Marca un comando como ejecutado"""
+    """LEGACY: Marca un comando como ejecutado (compatibilidad)"""
     payload = {
-        "estado_actual": "EJECUTADO",
-        "fecha_ejecucion": datetime.now(timezone.utc).isoformat(),
+        "estado_actual": "CONFIRMADO",
+        "fecha_confirmacion": datetime.now(timezone.utc).isoformat(),
     }
     try:
         resp = await client.patch(
             f"{SUPABASE_URL}/rest/v1/control_actuadores?id=eq.{cmd_id}",
             json=payload,
             headers=HEADERS_SERVICE,
+        )
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/comando/confirmar", dependencies=[Depends(verify_bridge_key)])
+async def confirmar_comando(data: dict):
+    """ESP32 confirma que ejecutó un comando.
+    Payload: { comando_id, dispositivo_id, resultado, estado_final, mensaje_error? }
+    """
+    try:
+        cmd_id = data.get("comando_id")
+        dispositivo_id = data.get("dispositivo_id")
+        resultado = data.get("resultado", "OK")
+        estado_final = data.get("estado_final", "ON")
+        msg_error = data.get("mensaje_error")
+
+        if not cmd_id:
+            raise HTTPException(400, "comando_id requerido")
+
+        # Verificar que el comando existe y pertenece al dispositivo
+        check = await client.get(
+            f"{SUPABASE_URL}/rest/v1/control_actuadores",
+            params={
+                "id": f"eq.{cmd_id}",
+                "dispositivo_id": f"eq.{dispositivo_id}",
+            },
+            headers=HEADERS_SERVICE,
+        )
+        if check.status_code != 200 or not check.json():
+            raise HTTPException(404, "Comando no encontrado o no pertenece al dispositivo")
+
+        cmd = check.json()[0]
+        if cmd.get("estado_actual") not in ("ENVIADO", "PENDIENTE"):
+            return {"status": "skipped", "reason": f"Estado actual: {cmd.get('estado_actual')}"}
+
+        # Actualizar estado según resultado
+        if resultado == "OK":
+            payload = {
+                "estado_actual": "CONFIRMADO",
+                "fecha_confirmacion": datetime.now(timezone.utc).isoformat(),
+            }
+        else:
+            payload = {
+                "estado_actual": "ERROR",
+                "fecha_confirmacion": datetime.now(timezone.utc).isoformat(),
+                "mensaje_error": msg_error or f"Resultado: {resultado}",
+            }
+
+        resp = await client.patch(
+            f"{SUPABASE_URL}/rest/v1/control_actuadores?id=eq.{cmd_id}",
+            json=payload,
+            headers={**HEADERS_SERVICE, "Prefer": "return=minimal"},
+        )
+
+        status_label = "CONFIRMADO" if resultado == "OK" else "ERROR"
+        print(f"[CONFIRM] cmd={cmd_id} -> {status_label}")
+        return {"status": status_label}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/comando/expirar", dependencies=[Depends(verify_bridge_key)])
+async def expirar_comandos():
+    """Expira comandos ENVIADO por más de 60s sin confirmación."""
+    try:
+        cutoff = (datetime.now(timezone.utc) - __import__('datetime').timedelta(seconds=60)).isoformat()
+        resp = await client.patch(
+            f"{SUPABASE_URL}/rest/v1/control_actuadores?estado_actual=eq.ENVIADO&fecha_envio=lt.{cutoff}",
+            json={
+                "estado_actual": "EXPIRADO",
+                "mensaje_error": "Sin confirmación del dispositivo en 60s",
+            },
+            headers={**HEADERS_SERVICE, "Prefer": "return=minimal"},
         )
         return {"status": "ok"}
     except Exception as e:

@@ -315,6 +315,42 @@ function updateActuadorUI(act) {
     if (lastEl && isOn) lastEl.textContent = now;
 }
 
+function setActuadorCmdStatus(nombre, status, msg) {
+    const stateEl = document.getElementById(`${nombre}-state`);
+    const modeEl = document.getElementById(`${nombre}-mode`);
+    const btn = document.getElementById(`btn-${nombre}`);
+    if (!btn) return;
+
+    const labels = {
+        PENDIENTE: 'Esperando...',
+        ENVIADO: 'Enviado',
+        CONFIRMADO: 'Aplicado',
+        ERROR: 'Error',
+        EXPIRADO: 'Sin respuesta'
+    };
+    const colors = {
+        PENDIENTE: '#FFD600',
+        ENVIADO: '#00BF',
+        CONFIRMADO: '#00C853',
+        ERROR: '#FF4545',
+        EXPIRADO: '#FF8C00'
+    };
+
+    if (status && labels[status]) {
+        if (modeEl) {
+            modeEl.textContent = labels[status];
+            modeEl.style.color = colors[status] || '';
+        }
+        btn.classList.add('cmd-pending');
+    } else {
+        if (modeEl) {
+            modeEl.textContent = 'MANUAL';
+            modeEl.style.color = '';
+        }
+        btn.classList.remove('cmd-pending');
+    }
+}
+
 // ============================================================
 // TOGGLE ACTUADOR
 // ============================================================
@@ -352,9 +388,15 @@ async function toggleActuador(nombre, macetaNum) {
     const actuadorId = actReal.id;
     const pin = actReal.pin_conexion;
 
+    // Show PENDIENTE status immediately
+    setActuadorCmdStatus(nombre, 'PENDIENTE');
+
     const ok = await SupabaseClient.enviarComando(actuadorId, nombre, pin, nuevoEstado, dispositivoId);
 
     if (ok) {
+        // Show ENVIADO status
+        setActuadorCmdStatus(nombre, 'ENVIADO');
+
         const now = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
 
         btn.innerHTML = `<span class="material-icons-round">power_settings_new</span><span class="btn-label">${nuevoEstado}</span>`;
@@ -367,6 +409,12 @@ async function toggleActuador(nombre, macetaNum) {
         if (led) led.classList.toggle('active', nuevoEstado === 'ON');
         if (fill) fill.style.width = nuevoEstado === 'ON' ? '100%' : '0%';
         if (lastEl && nuevoEstado === 'ON') lastEl.textContent = now;
+
+        // Clear status after 3s (command should be confirmed by then)
+        setTimeout(function() { setActuadorCmdStatus(nombre, null); }, 3000);
+    } else {
+        setActuadorCmdStatus(nombre, 'ERROR', 'Fallo de red');
+        setTimeout(function() { setActuadorCmdStatus(nombre, null); }, 3000);
     }
 }
 
