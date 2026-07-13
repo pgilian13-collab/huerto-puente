@@ -5,7 +5,7 @@
  * 4 sensores por maceta: Temp, HumAmb, HumSuelo, pH
  */
 
-const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
 const SupabaseClient = {
 
@@ -14,8 +14,8 @@ const SupabaseClient = {
         try {
             const resp = await fetch(url, {
                 headers: {
-                    'apikey': CONFIG.SUPABASE_KEY,
-                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                    'apikey': CONFIG.SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
                     'Content-Type': 'application/json',
                 }
             });
@@ -34,8 +34,8 @@ const SupabaseClient = {
             const resp = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'apikey': CONFIG.SUPABASE_KEY,
-                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                    'apikey': CONFIG.SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
                     'Content-Type': 'application/json',
                     'Prefer': 'return=minimal',
                 },
@@ -59,8 +59,8 @@ const SupabaseClient = {
             const resp = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'apikey': CONFIG.SUPABASE_KEY,
-                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                    'apikey': CONFIG.SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
                     'Content-Type': 'application/json',
                     'Prefer': 'return=representation',
                 },
@@ -81,8 +81,8 @@ const SupabaseClient = {
             const resp = await fetch(url, {
                 method: 'PATCH',
                 headers: {
-                    'apikey': CONFIG.SUPABASE_KEY,
-                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                    'apikey': CONFIG.SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
                     'Content-Type': 'application/json',
                     'Prefer': 'return=minimal',
                 },
@@ -103,7 +103,7 @@ const SupabaseClient = {
         try {
             const resp = await fetch(
                 `${CONFIG.SUPABASE_URL}/rest/v1/sectores?select=id&limit=1`,
-                { headers: { 'apikey': CONFIG.SUPABASE_KEY, 'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}` } }
+                { headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}` } }
             );
             return resp.ok;
         } catch {

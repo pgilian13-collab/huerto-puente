@@ -19,8 +19,9 @@
 
 const CONFIG = {
     SUPABASE_URL: 'https://nzicdhwoficzsafhdxmq.supabase.co',
-    SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56aWNkaHdvZmljenNhZmhkeG1xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDc4MTg0MywiZXhwIjoyMDk2MzU3ODQzfQ.Al5773jpjE6YiQ_hzyLVAVIzzgk0DkU8xQPMGkjXtOU',
+    SUPABASE_ANON_KEY: 'TU_SUPABASE_ANON_KEY_AQUI',
     BRIDGE_URL: 'https://huerto-puente.onrender.com',
+    BRIDGE_KEY: 'huerto-ccss-2026',
 
     DISPOSITIVOS: [
         { id: 1, nombre: 'INV-01', macetas: 4 },

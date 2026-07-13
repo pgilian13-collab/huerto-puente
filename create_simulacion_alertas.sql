@@ -1,7 +1,7 @@
 -- =============================================
 -- TABLA: simulacion_alertas
 -- Ejecutar en Supabase SQL Editor:
--- https://supabase.com/dashboard/project/nzicdhwoficzsafhdxmq/sql/new
+-- https://supabase.com/dashboard/project/TU-PROYECTO/sql/new
 -- =============================================
 
 -- La tabla ya existe, solo necesitas verificar que tenga estos campos:

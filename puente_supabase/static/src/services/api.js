@@ -6,27 +6,27 @@
 // ============================================================
 
 var ApiService = (function() {
-    var SUPABASE_URL = 'https://nzicdhwoficzsafhdxmq.supabase.co';
-    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56aWNkaHdvZmljenNhZmhkeG1xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDc4MTg0MywiZXhwIjoyMDk2MzU3ODQzfQ.Al5773jpjE6YiQ_hzyLVAVIzzgk0DkU8xQPMGkjXtOU';
-    var BRIDGE_URL = 'https://huerto-puente.onrender.com';
+    var SUPABASE_URL = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_URL : '';
+    var SUPABASE_KEY = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_ANON_KEY : '';
+    var BRIDGE_URL = (typeof CONFIG !== 'undefined') ? CONFIG.BRIDGE_URL : '';
+    var BRIDGE_KEY = (typeof CONFIG !== 'undefined') ? CONFIG.BRIDGE_KEY : '';
 
-    function headers(useService) {
-        var key = useService ? SUPABASE_KEY : SUPABASE_KEY;
+    function headers() {
         return {
-            'apikey': key,
-            'Authorization': 'Bearer ' + key,
+            'apikey': SUPABASE_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_KEY,
             'Content-Type': 'application/json'
         };
     }
 
     function get(url, opts) {
-        return fetch(url, { headers: headers(true) })
+        return fetch(url, { headers: headers() })
             .then(function(r) { return r.ok ? r.json() : null; })
             .catch(function(e) { console.error('[API] GET error:', e); return null; });
     }
 
     function post(url, data, extraHeaders) {
-        var h = headers(true);
+        var h = headers();
         if (extraHeaders) Object.assign(h, extraHeaders);
         return fetch(url, { method: 'POST', headers: h, body: JSON.stringify(data) })
             .then(function(r) { return r.ok ? r.json() : null; })
@@ -34,13 +34,13 @@ var ApiService = (function() {
     }
 
     function patch(url, data) {
-        return fetch(url, { method: 'PATCH', headers: headers(true), body: JSON.stringify(data) })
+        return fetch(url, { method: 'PATCH', headers: headers(), body: JSON.stringify(data) })
             .then(function(r) { return r.ok ? r.json() : null; })
             .catch(function(e) { console.error('[API] PATCH error:', e); return null; });
     }
 
     function del(url) {
-        return fetch(url, { method: 'DELETE', headers: headers(true) })
+        return fetch(url, { method: 'DELETE', headers: headers() })
             .then(function(r) { return r.ok; })
             .catch(function(e) { console.error('[API] DELETE error:', e); return false; });
     }
@@ -64,7 +64,7 @@ var ApiService = (function() {
     }
 
     function bridgePost(path, data) {
-        return post(BRIDGE_URL + path, data, { 'X-Bridge-Key': 'huerto-ccss-2026' });
+        return post(BRIDGE_URL + path, data, { 'X-Bridge-Key': BRIDGE_KEY });
     }
 
     function bridgePatch(path) {

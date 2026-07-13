@@ -6,13 +6,14 @@ Sistema de Riego Inteligente para un Huerto Universitario con Gemelo Digital y S
 ## Stack tecnologico
 - **ESP32** en Wokwi (MicroPython v1.22.0) — firmware del sensor
 - **Supabase** (PostgreSQL) — base de datos
-  - URL: `https://nzicdhwoficzsafhdxmq.supabase.co`
-  - Service Key: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56aWNkaHdvZmljenNhZmhkeG1xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDc4MTg0MywiZXhwIjoyMDk2MzU3ODQzfQ.Al5773jpjE6YiQ_hzyLVAVIzzgk0DkU8xQPMGkjXtOU`
+  - URL: `https://TU-PROYECTO.supabase.co`
+  - Anon Key: `TU_SUPABASE_ANON_KEY` (frontend — solo lectura)
+  - Service Key: `TU_SUPABASE_SERVICE_KEY` (backend — acceso completo, NUNCA en frontend)
 - **Render** (FastAPI) — Bridge + Frontend estatico
   - URL: `https://huerto-puente.onrender.com`
   - Repo: `https://github.com/pgilian13-collab/huerto-puente`
   - Branch: `master`, root: `puente_supabase/`
-  - `BRIDGE_SECRET_KEY` = `huerto-ccss-2026`
+  - `BRIDGE_SECRET_KEY` = `huerto-ccss-2026` (en variables de entorno de Render)
 - **Frontend** — SPA brutalista (JetBrains Mono, esquinas, remaches)
 - **Cisco Packet Tracer** — simulacion de red
 
@@ -101,11 +102,11 @@ Frontend (config.js o dashboard.js):
 - **Service Key** (usada en ESP32 + Bridge): tiene permisos completos (INSERT, SELECT, UPDATE, DELETE)
 - **Anon Key** (usada en Frontend): solo puede SELECT (lectura)
 - El ESP32 usa la Service Key directamente porque no tiene Supabase Auth
-- El Frontend usa la Service Key via REST API (sin RLS habilitado en tablas)
+- El Frontend usa la Anon Key via REST API (con RLS habilitado en tablas)
 
 ### Bridge
-- **BRIDGE_SECRET_KEY** = `huerto-ccss-2026`
-- Todos los POST al Bridge requieren header `X-Bridge-Key: huerto-ccss-2026`
+- **BRIDGE_SECRET_KEY** (en variables de entorno de Render)
+- Todos los POST al Bridge requieren header `X-Bridge-Key`
 - GET /ping no requiere key (para heartbeat del ESP32)
 - GET /health no requiere key (para monitoreo)
 - Frontend envia la key en `ApiService.bridgePost()` automaticamente
