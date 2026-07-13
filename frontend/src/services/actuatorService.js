@@ -32,7 +32,15 @@ var ActuatorService = (function() {
     function fetchActuadores(invIndex) {
         var deviceId = invIndex + 1;
         return getActuadoresByDevice(deviceId).then(function(data) {
-            if (data) AppState.set('actuators', data);
+            if (data) {
+                AppState.set('actuators', data);
+                // Also build lookup by (maceta_num, nombre) for quick access
+                var map = {};
+                data.forEach(function(a) {
+                    map[a.maceta_num + '_' + a.nombre] = a;
+                });
+                AppState.set('actuadoresMap', map);
+            }
             return data;
         });
     }

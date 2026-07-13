@@ -327,6 +327,40 @@ RELAYS = {
     3: {'bomba': Pin(12, Pin.OUT), 'ventilador': Pin(11, Pin.OUT), 'pulverizador': Pin(10, Pin.OUT)},
     4: {'bomba': Pin(8, Pin.OUT),  'ventilador': Pin(7, Pin.OUT),  'pulverizador': Pin(6, Pin.OUT)},
 }
+
+# ============================================================
+# MAPA DE ACTUADORES — ID de Supabase → (maceta, nombre_relay)
+# ============================================================
+# Cada ESP32 maneja IDs 1-13 (su dispositivo):
+#   IDs 1-3: MAC-1 (bomba, ventilador, pulverizador)
+#   IDs 4-6: MAC-2
+#   IDs 7-9: MAC-3
+#   IDs 10-12: MAC-4
+#   ID 13: buzzer global
+ACTUADOR_MAP = {
+    1:  (1, 'bomba'),        2:  (1, 'ventilador'),    3:  (1, 'pulverizador'),
+    4:  (2, 'bomba'),        5:  (2, 'ventilador'),    6:  (2, 'pulverizador'),
+    7:  (3, 'bomba'),        8:  (3, 'ventilador'),    9:  (3, 'pulverizador'),
+    10: (4, 'bomba'),        11: (4, 'ventilador'),    12: (4, 'pulverizador'),
+    13: (0, 'buzzer'),
+}
+
+def normalize_actuador_name(nombre):
+    """Normaliza nombre descriptivo a nombre interno de relay.
+    LEGACY: soporta nombres como 'Bomba MAC1' → 'bomba'.
+    """
+    if not nombre:
+        return None
+    n = nombre.lower().strip()
+    if 'bomba' in n:
+        return 'bomba'
+    if 'ventilador' in n or 'vent' in n:
+        return 'ventilador'
+    if 'pulverizador' in n or 'pulv' in n:
+        return 'pulverizador'
+    if 'buzzer' in n:
+        return 'buzzer'
+    return None
 buzzer = PWM(Pin(26))
 
 # LEDs status - GPIO32 se usa para bomba MAC-1, GPIO33 y GPIO25 disponibles
@@ -635,17 +669,35 @@ def sync_with_bridge(lecturas_db):
     commands = resp.get("commands", [])
     for cmd in commands:
         cmd_id = cmd.get("id")
-        pin_str = cmd.get("pin_conexion", "")
         estado = cmd.get("estado_solicitado", "OFF")
+        actuador_id = cmd.get("actuador_id")
         nombre = cmd.get("nombre_actuador", "")
-        if nombre == "buzzer":
-            set_buzzer(800 if estado == "ON" else 0, 10 if estado == "ON" else 0)
+
+        # FLUJO PRINCIPAL: por actuador_id (ID de Supabase)
+        if actuador_id and actuador_id in ACTUADOR_MAP:
+            maceta, relay_name = ACTUADOR_MAP[actuador_id]
+            if relay_name == 'buzzer':
+                set_buzzer(800 if estado == "ON" else 0, 10 if estado == "ON" else 0)
+            else:
+                set_relay(maceta, relay_name, estado)
+            print("[CMD] ID={} {} MAC-{} -> {}".format(actuador_id, relay_name, maceta, estado))
         else:
-            for m in range(1, 5):
-                if pin_str in RELAYS[m]:
-                    set_relay(m, nombre, estado)
-                    break
-        print("[CMD] {} -> {}".format(nombre, estado))
+            # LEGACY: compatibilidad por nombre (temporal)
+            relay_name = normalize_actuador_name(nombre)
+            if relay_name == 'buzzer':
+                set_buzzer(800 if estado == "ON" else 0, 10 if estado == "ON" else 0)
+                print("[CMD-LEGACY] {} -> {}".format(nombre, estado))
+            elif relay_name:
+                pin_str = cmd.get("pin_conexion", "")
+                for m in range(1, 5):
+                    if pin_str in RELAYS[m]:
+                        set_relay(m, relay_name, estado)
+                        print("[CMD-LEGACY] {} MAC-{} -> {}".format(nombre, m, estado))
+                        break
+                else:
+                    print("[CMD-LEGACY] No se encontro pin {} para {}".format(pin_str, nombre))
+            else:
+                print("[CMD] Actuador desconocido: id={} nombre={}".format(actuador_id, nombre))
 
     # Process overrides from response
     overrides = resp.get("overrides", [])

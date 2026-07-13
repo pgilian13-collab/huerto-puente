@@ -93,14 +93,20 @@ var App = (function() {
             var inv = AppState.get('currentInv') || 0;
             var deviceId = inv + 1;
             var mac = AppState.get('currentMaceta') || 1;
-            var actuators = AppState.get('actuators') || [];
-            var act = null;
-            for (var i = 0; i < actuators.length; i++) {
-                if (actuators[i].maceta_num === mac && actuators[i].nombre_actuador === actuatorName) {
-                    act = actuators[i];
-                    break;
+            var map = AppState.get('actuadoresMap') || {};
+            var act = map[mac + '_' + actuatorName];
+
+            // Fallback: buzzer (maceta_num=0)
+            if (!act && actuatorName === 'buzzer') {
+                var actuators = AppState.get('actuators') || [];
+                for (var i = 0; i < actuators.length; i++) {
+                    if (actuators[i].nombre === 'buzzer') {
+                        act = actuators[i];
+                        break;
+                    }
                 }
             }
+
             if (!act) {
                 console.error('[ACT] Actuador no encontrado:', actuatorName, 'MAC-' + mac);
                 return;
@@ -109,7 +115,7 @@ var App = (function() {
             var isOn = currentBtn && currentBtn.classList.contains('on');
             var newEstado = isOn ? 'OFF' : 'ON';
 
-            ActuatorService.toggleActuador(act.id, act.nombre_actuador, act.pin_conexion, newEstado, deviceId).then(function(res) {
+            ActuatorService.toggleActuador(act.id, act.nombre, act.pin_conexion, newEstado, deviceId).then(function(res) {
                 if (res && res.success) {
                     console.log('[ACT] ' + actuatorName + ' -> ' + newEstado);
                 }

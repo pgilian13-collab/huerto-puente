@@ -286,7 +286,10 @@ function setSensorStatus(elementId, status) {
 // UI ACTUADORES
 // ============================================================
 
+var actuadoresCache = [];
+
 function actualizarActuadores(actuadores) {
+    actuadoresCache = actuadores || [];
     actuadores.forEach(act => {
         updateActuadorUI(act);
     });
@@ -322,14 +325,32 @@ async function toggleActuador(nombre, macetaNum) {
     const nuevoEstado = isOn ? 'OFF' : 'ON';
     const dispositivoId = currentInv + 1;
 
-    let actuadorId, pin;
-    if (nombre === 'buzzer') {
-        actuadorId = CONFIG.getBuzzerId(dispositivoId);
-        pin = 26;
-    } else {
-        actuadorId = CONFIG.getActuadorId(dispositivoId, macetaNum, nombre === 'bomba' ? 1 : nombre === 'ventilador' ? 2 : 3);
-        pin = CONFIG.PIN_MAP[macetaNum][nombre];
+    // Buscar actuador real en cache de Supabase
+    let actReal = null;
+    for (var i = 0; i < actuadoresCache.length; i++) {
+        var a = actuadoresCache[i];
+        if (a.nombre === nombre && a.maceta_num === macetaNum) {
+            actReal = a;
+            break;
+        }
     }
+    // Fallback: buzzer (maceta_num=0)
+    if (!actReal && nombre === 'buzzer') {
+        for (var i = 0; i < actuadoresCache.length; i++) {
+            if (actuadoresCache[i].nombre === 'buzzer') {
+                actReal = actuadoresCache[i];
+                break;
+            }
+        }
+    }
+
+    if (!actReal) {
+        console.error('[ACT] No se encontro actuador:', nombre, 'maceta:', macetaNum);
+        return;
+    }
+
+    const actuadorId = actReal.id;
+    const pin = actReal.pin_conexion;
 
     const ok = await SupabaseClient.enviarComando(actuadorId, nombre, pin, nuevoEstado, dispositivoId);
 
