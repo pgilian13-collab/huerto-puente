@@ -667,7 +667,8 @@ var ConfigModule = (function() {
         showRecommendations: showRecommendations,
         seleccionarPlanta: seleccionarPlanta,
         openAddPlantModal: openAddPlantModal,
-        openRecommendationsModal: openRecommendationsModal
+        openRecommendationsModal: openRecommendationsModal,
+        get allPlants() { return allPlants; }
     };
 })();
 

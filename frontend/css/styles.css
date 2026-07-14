@@ -4476,6 +4476,60 @@ body {
 }
 
 /* ============================================================
+   INLINE PLANT SELECTOR (Dashboard thresholds panel)
+   ============================================================ */
+
+.plant-selector-inline {
+    padding: 14px 16px 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+}
+.plant-selector-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+.plant-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+}
+.plant-selector-inline .plant-search-input {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    border-radius: 3px;
+    box-sizing: border-box;
+}
+.plant-selector-inline .plant-search-input:focus {
+    outline: none;
+    border-color: var(--accent-green);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
+}
+.plant-dropdown-dash {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    margin-top: 2px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    max-height: 280px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    border-radius: 3px;
+}
+.plant-dropdown-dash:not(.active) { display: none; }
+.plant-badge-dash { flex-shrink: 0; }
+
+/* ============================================================
    PLANT RECOMMENDATIONS
    ============================================================ */
 .plant-recommendations { padding: 12px 0; border-top: 1px solid var(--border); }

@@ -211,6 +211,17 @@ var DashboardModule = (function() {
 
         // Config
         html += '<div class="panel"><div class="panel-header"><span class="material-icons-round">settings</span><h3>Configuracion de Umbrales</h3><div class="panel-tag">SYS//CONFIG</div></div>';
+        html += '<div class="plant-selector-inline">';
+        html += '<label class="config-label"><span class="material-icons-round">eco</span> Planta de esta maceta</label>';
+        html += '<div class="plant-selector-row">';
+        html += '<div class="plant-search-wrap"><input type="text" id="dashPlantSearchInput" class="plant-search-input" placeholder="Buscar planta del catalogo..."><div class="plant-dropdown plant-dropdown-dash" id="dashPlantDropdown"></div></div>';
+        html += '<div class="plant-badge plant-badge-dash" id="dashPlantBadge" style="display:none"><span id="dashPlantBadgeName"></span><button class="plant-badge-remove" id="dashPlantBadgeRemove"><span class="material-icons-round">close</span></button></div>';
+        html += '</div>';
+        html += '<div class="plant-actions">';
+        html += '<button class="brutalist-btn btn-plant-action" id="btnAddPlantDash"><span class="material-icons-round">add_circle</span><span class="btn-label">Agregar Planta</span></button>';
+        html += '<button class="brutalist-btn btn-plant-action" id="btnShowRecommendationsDash"><span class="material-icons-round">lightbulb</span><span class="btn-label">Recomendaciones</span></button>';
+        html += '</div>';
+        html += '</div>';
         html += '<div class="config-grid">';
         html += configItem('Temperatura', u.temp, 'C', 'cfg-temp');
         html += configItem('Humedad Ambiente', u.humAmb, '%', 'cfg-hum');
@@ -274,6 +285,9 @@ var DashboardModule = (function() {
         // Chart refresh button
         var btnRefresh = document.getElementById('btnRefreshChart');
         if (btnRefresh) btnRefresh.addEventListener('click', loadChartData);
+
+        // === Plant selector inline en dashboard ===
+        bindDashPlantSelector();
 
         // Config save button
         var btnSave = document.getElementById('btnSaveConfig');
@@ -586,6 +600,138 @@ var DashboardModule = (function() {
 })();
 
 if (typeof window !== 'undefined') window.DashboardModule = DashboardModule;
+
+// ============================================================
+// Plant Selector inline en Dashboard
+// ============================================================
+
+function bindDashPlantSelector() {
+    var input = document.getElementById('dashPlantSearchInput');
+    var dropdown = document.getElementById('dashPlantDropdown');
+    var badge = document.getElementById('dashPlantBadge');
+    var badgeName = document.getElementById('dashPlantBadgeName');
+    var badgeRemove = document.getElementById('dashPlantBadgeRemove');
+    var btnAdd = document.getElementById('btnAddPlantDash');
+    var btnRec = document.getElementById('btnShowRecommendationsDash');
+
+    if (!input || !dropdown) return;
+
+    function getPlants() {
+        return (typeof ConfigModule !== 'undefined' && ConfigModule.allPlants)
+            ? ConfigModule.allPlants
+            : (window.CATALOGO_PLANTAS || []);
+    }
+
+    function normalize(s) {
+        return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function renderDropdown(query) {
+        var plants = getPlants();
+        var q = normalize(query);
+        var filtered = plants.filter(function(p) {
+            return !q || normalize(p.nombre).indexOf(q) !== -1;
+        }).slice(0, 12);
+        if (filtered.length === 0) {
+            dropdown.innerHTML = '<div class="plant-dropdown-empty">Sin resultados</div>';
+            return;
+        }
+        dropdown.innerHTML = filtered.map(function(p) {
+            return '<div class="plant-dropdown-item" data-id="' + p.id + '">' +
+                '<span class="plant-dropdown-name">' + p.nombre + '</span>' +
+                '<span class="plant-dropdown-range">' + p.temp_min + '-' + p.temp_max + '\u00B0C</span>' +
+                '</div>';
+        }).join('');
+        var items = dropdown.querySelectorAll('.plant-dropdown-item');
+        for (var i = 0; i < items.length; i++) {
+            items[i].addEventListener('click', function() {
+                var id = parseInt(this.getAttribute('data-id'));
+                selectPlantFromCatalog(id);
+                dropdown.classList.remove('active');
+                input.value = '';
+            });
+        }
+    }
+
+    function selectPlantFromCatalog(id) {
+        var plants = getPlants();
+        var plant = plants.find(function(p) { return p.id === id; });
+        if (!plant) return;
+        function setVal(elId, v) {
+            var el = document.getElementById(elId);
+            if (el) el.value = v;
+        }
+        setVal('cfg-temp-min', plant.temp_min);
+        setVal('cfg-temp-max', plant.temp_max);
+        setVal('cfg-hum-min', plant.hum_ambiente_min);
+        setVal('cfg-hum-max', plant.hum_ambiente_max);
+        setVal('cfg-humsuelo-min', plant.hum_suelo_min);
+        setVal('cfg-humsuelo-max', plant.hum_suelo_max);
+        setVal('cfg-ph-min', plant.ph_min);
+        setVal('cfg-ph-max', plant.ph_max);
+
+        if (badge && badgeName) {
+            badgeName.textContent = plant.nombre;
+            badge.style.display = 'inline-flex';
+        }
+
+        try {
+            var inv = (AppState.get('currentInv') || 0) + 1;
+            var mac = AppState.get('currentMaceta') || 1;
+            var key = 'huerto_planta_inv' + inv + '_mac' + mac;
+            localStorage.setItem(key, JSON.stringify(plant));
+        } catch (e) {}
+    }
+
+    input.addEventListener('input', function() { renderDropdown(input.value); });
+    input.addEventListener('focus', function() {
+        renderDropdown(input.value);
+        dropdown.classList.add('active');
+    });
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.remove('active');
+        }
+    });
+
+    if (badgeRemove) {
+        badgeRemove.addEventListener('click', function() {
+            try {
+                var inv = (AppState.get('currentInv') || 0) + 1;
+                var mac = AppState.get('currentMaceta') || 1;
+                localStorage.removeItem('huerto_planta_inv' + inv + '_mac' + mac);
+            } catch (e) {}
+            if (badge) badge.style.display = 'none';
+        });
+    }
+
+    if (btnAdd) btnAdd.addEventListener('click', function() {
+        if (typeof ConfigModule !== 'undefined' && ConfigModule.openAddPlantModal) {
+            ConfigModule.openAddPlantModal();
+        } else {
+            var m = document.getElementById('addPlantModal');
+            if (m) m.classList.add('active');
+        }
+    });
+    if (btnRec) btnRec.addEventListener('click', function() {
+        if (typeof ConfigModule !== 'undefined' && ConfigModule.openRecommendationsModal) {
+            ConfigModule.openRecommendationsModal();
+        } else {
+            var m = document.getElementById('recPlantModal');
+            if (m) m.classList.add('active');
+        }
+    });
+
+    try {
+        var inv = (AppState.get('currentInv') || 0) + 1;
+        var mac = AppState.get('currentMaceta') || 1;
+        var saved = JSON.parse(localStorage.getItem('huerto_planta_inv' + inv + '_mac' + mac) || 'null');
+        if (saved && badge && badgeName) {
+            badgeName.textContent = saved.nombre;
+            badge.style.display = 'inline-flex';
+        }
+    } catch (e) {}
+}
 
 // ============================================================
 // OverrideManager - Multi-override visualization
