@@ -625,6 +625,27 @@ async def cleanup_alertas():
         return {"error": str(e), "cleaned": 0}
 
 
+@app.post("/api/simulacion/reset", dependencies=[Depends(verify_bridge_key)])
+async def reset_overrides_boot(data: dict):
+    """Apaga cualquier override activo de un dispositivo. Se llama al arrancar el ESP32
+    para garantizar que la primera lectura sea 100% fisica (sin overrides heredados)."""
+    device = data.get("device")
+    if device is None:
+        raise HTTPException(400, detail="device requerido")
+    try:
+        resp = await client.patch(
+            f"{SUPABASE_URL}/rest/v1/simulacion_alertas",
+            params={"dispositivo_id": f"eq.{device}", "activa": "eq.true"},
+            json={"activa": False},
+            headers=HEADERS_SERVICE,
+        )
+        print(f"[BOOT-RESET] device={device} status={resp.status_code}")
+        return {"ok": True}
+    except Exception as e:
+        print(f"[BOOT-RESET] Error: {e}")
+        return {"ok": False, "detail": str(e)}
+
+
 @app.post("/api/simulacion/alerta", dependencies=[Depends(verify_bridge_key)])
 async def crear_alerta_simulacion(data: dict):
     """Crea una alerta de simulacion que el ESP32 escuchara."""

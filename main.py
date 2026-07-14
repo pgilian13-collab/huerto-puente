@@ -673,13 +673,25 @@ def _http_patch(path, timeout=8):
         gc.collect()
         return 0
 
+boot_overrides_cleared = False
+
+def reset_overrides_boot():
+    """Llama al Bridge para apagar overrides heredados de sesiones anteriores."""
+    global boot_overrides_cleared
+    try:
+        code, resp = _http_post("/api/simulacion/reset", {"device": MODULE_ID}, timeout=8)
+        print("[BOOT-RESET] code={} resp={}".format(code, resp))
+    except Exception as e:
+        print("[BOOT-RESET] Error: {}".format(e))
+    boot_overrides_cleared = True
+
 def sync_with_bridge(lecturas_db, first_boot=False):
     """Piggyback: send sensors AND receive commands + overrides in ONE HTTP call.
     Sends ALL 10 sensors every call (no delta filter) to ensure complete data.
     If first_boot=True, sends reset_overrides=True to invalidate stale overrides
     from previous sessions, and discards any overrides returned in the response.
     """
-    global wifi_fail_count, first_sync_done
+    global wifi_fail_count, first_sync_done, boot_overrides_cleared
 
     payload = {"device": MODULE_ID, "pending": True}
     sensors = {}
@@ -755,38 +767,30 @@ def sync_with_bridge(lecturas_db, first_boot=False):
                 confirmar_comando(cmd_id, MODULE_ID, "ERROR", estado, "Actuador no encontrado")
 
     # Process overrides from response
-    overrides = resp.get("overrides", [])
-    if first_boot:
-        # Bug 1 fix: discard inherited overrides on first sync after boot
-        for alerta in overrides:
-            maceta = alerta.get("maceta_numero", "?")
-            sensor_tipo = alerta.get("sensor_tipo", "?")
-            print("[BOOT] Override heredado descartado: MAC-{} {}".format(maceta, sensor_tipo))
-        if not sensor_override.overrides == {}:
-            sensor_override.overrides = {}
-            print("[BOOT] sensor_override.overrides limpiado")
-        else:
-            print("[BOOT] sensor_override.overrides ya estaba vacío")
-        first_sync_done = True
-    else:
-        active_keys = set()
-        for alerta in overrides:
-            maceta = alerta.get("maceta_numero")
-            sensor_tipo = alerta.get("sensor_tipo")
-            valor_forzado = alerta.get("valor_forzado")
-            if maceta is not None and sensor_tipo and valor_forzado is not None:
-                active_keys.add((maceta, sensor_tipo))
-                if not sensor_override.tiene_override(maceta, sensor_tipo):
-                    valor_fisico = float(valor_forzado)
-                    if last_lecturas.get(maceta):
-                        vf = last_lecturas[maceta].get(sensor_tipo)
-                        if vf is not None:
-                            valor_fisico = float(vf)
-                    sensor_override.set_override(
-                        maceta, sensor_tipo, float(valor_forzado), valor_fisico)
-        for key in list(sensor_override.overrides.keys()):
-            if key not in active_keys:
-                sensor_override._clear_override(key[0], key[1])
+    # BOOT-SAFE: en el primer sync tras arrancar, ignorar overrides heredados
+    # para garantizar que la primera lectura reportada sea 100% fisica.
+    overrides = resp.get("overrides", []) if boot_overrides_cleared else []
+    if not boot_overrides_cleared:
+        print("[SYNC] Primer sync post-boot: overrides ignorados (solo lectura fisica)")
+        boot_overrides_cleared = True
+    active_keys = set()
+    for alerta in overrides:
+        maceta = alerta.get("maceta_numero")
+        sensor_tipo = alerta.get("sensor_tipo")
+        valor_forzado = alerta.get("valor_forzado")
+        if maceta is not None and sensor_tipo and valor_forzado is not None:
+            active_keys.add((maceta, sensor_tipo))
+            if not sensor_override.tiene_override(maceta, sensor_tipo):
+                valor_fisico = float(valor_forzado)
+                if last_lecturas.get(maceta):
+                    vf = last_lecturas[maceta].get(sensor_tipo)
+                    if vf is not None:
+                        valor_fisico = float(vf)
+                sensor_override.set_override(
+                    maceta, sensor_tipo, float(valor_forzado), valor_fisico)
+    for key in list(sensor_override.overrides.keys()):
+        if key not in active_keys:
+            sensor_override._clear_override(key[0], key[1])
 
     # Update dynamic config from response
     cfg = resp.get("config", {})
@@ -950,6 +954,9 @@ last_lecturas = {}
 heartbeat_timer = 0
 sync_counter = 0
 first_sync_done = False
+
+if wifi_ok:
+    reset_overrides_boot()
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
 print("=== MODO HIBRIDO ACTIVADO ===")
