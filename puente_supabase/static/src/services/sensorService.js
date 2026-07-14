@@ -8,7 +8,7 @@
 var SensorService = (function() {
     var pollTimer = null;
     var realtimeChannel = null;
-    var POLL_MS = 5000;
+    var POLL_MS = 2000;
     var USE_REALTIME = true;
     var INV_INDEX = 0;
     var connectionStartTime = null;

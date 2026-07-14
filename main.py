@@ -45,11 +45,11 @@ DB_SYNC_INTERVAL = 10
 
 class SensorOverride:
     """Maneja el forzado de valores de sensores por software.
-    
-    Ciclo de 3 fases:
-    1. DEGRADING (21s): valor fisico actual -> valor critico (7 pasos x 3s)
+
+    Ciclo rapido de 3 fases para feedback visible (total ~21s):
+    1. DEGRADING (7s): valor fisico actual -> valor critico (7 pasos x 1s)
     2. HOLDING (2s): se mantiene en valor critico
-    3. RECOVERING (60s): valor critico -> setpoint ideal (20 pasos x 3s)
+    3. RECOVERING (12s): critico -> setpoint ideal (12 pasos x 1s)
     """
     
     PHASE_DEGRADING = 0
@@ -98,15 +98,17 @@ class SensorOverride:
             'fase': self.PHASE_DEGRADING,
             'paso': 0,
             'max_pasos_deg': 7,
-            'max_pasos_rec': 20,
+            'max_pasos_rec': 12,
             'hold_inicio': 0,
             'hold_duracion': 2,
+            'paso_intervalo': 1.0,
             'activo': True,
             'ultima_actualizacion': time.time()
         }
-        
-        print("[OVERRIDE] MAC-{} {} DEGRAD {} -> {}".format(
-            maceta, sensor_tipo, valor_fisico_actual, valor_forzado))
+
+        print("[OVERRIDE] MAC-{} {} DEGRAD {} -> {} ({}s)".format(
+            maceta, sensor_tipo, valor_fisico_actual, valor_forzado,
+            int(7 * 1.0)))
     
     def get_valor(self, maceta, sensor_tipo, valor_fisico):
         """Obtener valor del sensor (fisico o forzado)."""
@@ -137,7 +139,8 @@ class SensorOverride:
         
         if fase == self.PHASE_DEGRADING:
             elapsed = now - stab['ultima_actualizacion']
-            if elapsed >= 3:
+            intervalo = stab.get('paso_intervalo', 1.0)
+            if elapsed >= intervalo:
                 stab['paso'] += 1
                 stab['ultima_actualizacion'] = now
                 progreso = min(stab['paso'] / stab['max_pasos_deg'], 1.0)
@@ -145,7 +148,7 @@ class SensorOverride:
                 critico = stab['valor_critico']
                 valor_nuevo = round(inicio + (critico - inicio) * progreso, 1)
                 self.overrides[key]['valor'] = valor_nuevo
-                if stab['paso'] % 3 == 0:
+                if stab['paso'] % 2 == 0:
                     print("[DEGRAD] MAC-{} {} {}/{}: {} -> {}".format(
                         maceta, sensor_tipo, stab['paso'], stab['max_pasos_deg'],
                         inicio, valor_nuevo))
@@ -156,7 +159,7 @@ class SensorOverride:
                     self.overrides[key]['valor'] = critico
                     print("[HOLD] MAC-{} {} en critico {}".format(maceta, sensor_tipo, critico))
             return self.overrides[key]['valor']
-        
+
         elif fase == self.PHASE_HOLDING:
             if now - stab['hold_inicio'] >= stab['hold_duracion']:
                 stab['fase'] = self.PHASE_RECOVERING
@@ -166,10 +169,11 @@ class SensorOverride:
                 print("[RECOVER] MAC-{} {} -> setpoint={}".format(
                     maceta, sensor_tipo, stab['setpoint']))
             return self.overrides[key]['valor']
-        
+
         elif fase == self.PHASE_RECOVERING:
             elapsed = now - stab['ultima_actualizacion']
-            if elapsed >= 3:
+            intervalo = stab.get('paso_intervalo', 1.0)
+            if elapsed >= intervalo:
                 stab['paso'] += 1
                 stab['ultima_actualizacion'] = now
                 progreso = min(stab['paso'] / stab['max_pasos_rec'], 1.0)
@@ -177,7 +181,7 @@ class SensorOverride:
                 setpoint = stab['setpoint']
                 valor_nuevo = round(critico + (setpoint - critico) * progreso, 1)
                 self.overrides[key]['valor'] = valor_nuevo
-                if stab['paso'] % 5 == 0:
+                if stab['paso'] % 3 == 0:
                     print("[RECOVER] MAC-{} {} {}/{}: {} -> {}".format(
                         maceta, sensor_tipo, stab['paso'], stab['max_pasos_rec'],
                         critico, valor_nuevo))
