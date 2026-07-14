@@ -172,6 +172,7 @@ var App = (function() {
 
         // 12. Init sensor modal
         initSensorModal();
+        initGlobalModalHandlers();
 
         // 13. Hide loader
         var loader = document.getElementById('loader');
@@ -308,6 +309,60 @@ var App = (function() {
         });
     }
 
+    // ============================================================
+    // GLOBAL MODAL MANAGER - Escape key + backdrop click universal
+    // ============================================================
+
+    var MODAL_IDS = ['sensorModal', 'configModal', 'addPlantModal', 'recPlantModal'];
+
+    function closeAllModals() {
+        MODAL_IDS.forEach(function(id) {
+            var m = document.getElementById(id);
+            if (m && m.classList.contains('active')) {
+                m.classList.remove('active');
+            }
+        });
+    }
+
+    function closeTopModal() {
+        for (var i = MODAL_IDS.length - 1; i >= 0; i--) {
+            var m = document.getElementById(MODAL_IDS[i]);
+            if (m && m.classList.contains('active')) {
+                m.classList.remove('active');
+                return;
+            }
+        }
+    }
+
+    function initGlobalModalHandlers() {
+        // Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' || e.keyCode === 27) {
+                closeTopModal();
+            }
+        });
+
+        // Backdrop click para TODOS los modales (idempotente)
+        MODAL_IDS.forEach(function(id) {
+            var modal = document.getElementById(id);
+            if (!modal) return;
+            // Verificar si ya tiene listener (no duplicar)
+            if (!modal._backdropWired) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) modal.classList.remove('active');
+                });
+                modal._backdropWired = true;
+            }
+        });
+
+        // configModal: agregar boton cerrar con id (ya tiene onclick en HTML,
+        // pero agregamos tambien un listener para Escape + backdrop)
+        var cfgClose = document.getElementById('configModalClose');
+        if (!cfgClose && document.getElementById('configModal')) {
+            // Si el HTML usa onclick inline, no necesitamos mas
+        }
+    }
+
     function loadSensorData(sensorType) {
         var inv = AppState.get('currentInv') || 0;
         SensorService.fetchHistory(inv, 50).then(function(rows) {
@@ -437,7 +492,7 @@ var App = (function() {
         }
     }
 
-    return { init: init, logout: logout };
+    return { init: init, logout: logout, showToast: showToast, closeAllModals: closeAllModals, closeTopModal: closeTopModal };
 })();
 
 if (typeof window !== 'undefined') window.App = App;

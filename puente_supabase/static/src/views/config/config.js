@@ -328,6 +328,13 @@ var ConfigModule = (function() {
 
         var pk = getPlantaKey();
         try { localStorage.setItem(pk, JSON.stringify(plant)); } catch (e) {}
+
+        if (window.App && typeof App.showToast === 'function') {
+            App.showToast('Umbrales de "' + plant.nombre + '" aplicados - click Guardar', 'success');
+        }
+
+        // Emitir evento para que dashboard tambn se entere
+        try { EventBus.emit('plant:selected', plant); } catch (e) {}
     }
 
     function setInput(id, value) {
