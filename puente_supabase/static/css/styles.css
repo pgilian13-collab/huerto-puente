@@ -4530,6 +4530,31 @@ body {
 .plant-badge-dash { flex-shrink: 0; }
 
 /* ============================================================
+   SIMULATION MODE BADGE
+   ============================================================ */
+
+.sim-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(245, 158, 11, 0.18);
+    border: 1px solid #f59e0b;
+    color: #f59e0b;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border-radius: 3px;
+    margin-left: 8px;
+    animation: sim-badge-pulse 1.5s infinite;
+}
+@keyframes sim-badge-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ============================================================
    PLANT RECOMMENDATIONS
    ============================================================ */
 .plant-recommendations { padding: 12px 0; border-top: 1px solid var(--border); }

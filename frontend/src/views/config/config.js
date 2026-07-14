@@ -353,11 +353,43 @@ var ConfigModule = (function() {
         var pk = getPlantaKey();
         try { localStorage.setItem(pk, JSON.stringify(plant)); } catch (e) {}
 
+        // Enviar baselines al bridge para que el ESP32 use estos valores
+        // como base estable cuando NO hay simulacion activa
+        enviarBaselines(plant);
+
         if (window.App && typeof App.showToast === 'function') {
             App.showToast('Umbrales de "' + plant.nombre + '" aplicados - click Guardar', 'success');
         }
 
         try { EventBus.emit('plant:selected', plant); } catch (e) {}
+    }
+
+    function enviarBaselines(plant) {
+        if (!plant || !ApiService || !ApiService.bridgePost) return;
+        var inv = AppState.get('currentInv') || 0;
+        var mac = AppState.get('currentMaceta') || 1;
+        var deviceId = inv + 1;
+        // Midpoint de cada rango = valor baseline estable
+        var mid = function(min, max) { return min != null && max != null ? (min + max) / 2 : null; };
+        var payload = {
+            device_id: deviceId,
+            maceta: mac,
+            planta_id: plant.id,
+            temp: mid(plant.temp_min, plant.temp_max),
+            hum_amb: mid(plant.hum_ambiente_min, plant.hum_ambiente_max),
+            hum_suelo: mid(plant.hum_suelo_min, plant.hum_suelo_max),
+            ph: mid(plant.ph_min, plant.ph_max),
+            // Tambien enviar umbrales completos
+            temp_min: plant.temp_min, temp_max: plant.temp_max,
+            hum_amb_min: plant.hum_ambiente_min, hum_amb_max: plant.hum_ambiente_max,
+            hum_suelo_min: plant.hum_suelo_min, hum_suelo_max: plant.hum_suelo_max,
+            ph_min: plant.ph_min, ph_max: plant.ph_max
+        };
+        ApiService.bridgePost('/api/config/baselines', payload).then(function(res) {
+            console.log('[CONFIG] Baselines enviados al bridge para', plant.nombre);
+        }).catch(function(e) {
+            console.warn('[CONFIG] No se pudieron enviar baselines:', e);
+        });
     }
 
     function setInput(id, value) {

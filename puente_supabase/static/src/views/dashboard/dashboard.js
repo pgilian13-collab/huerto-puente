@@ -98,6 +98,13 @@ var DashboardModule = (function() {
         EventBus.on('sensors:updated', onSensorsUpdated);
         EventBus.on('maceta:selected', onMacetaChanged);
         EventBus.on('sidebar:selectInv', onInvernaderoChanged);
+        if (typeof OverrideManager !== 'undefined') {
+            var origUpdate = OverrideManager.update;
+            OverrideManager.update = function() {
+                origUpdate.apply(this, arguments);
+                updateSimulationBadge();
+            };
+        }
     }
 
     function onInvernaderoChanged(idx) {
@@ -205,7 +212,7 @@ var DashboardModule = (function() {
         html += '<div class="bottom-grid">';
 
         // Historical chart
-        html += '<div class="panel"><div class="panel-header"><span class="material-icons-round">timeline</span><h3>Historico - 24h</h3><div class="panel-header-actions"><div class="panel-tag">SYS//CHART</div></div></div>';
+        html += '<div class="panel"><div class="panel-header"><span class="material-icons-round">timeline</span><h3>Historico - 24h</h3><div class="panel-header-actions"><div class="panel-tag">SYS//CHART</div><span id="simModeBadge" class="sim-mode-badge" style="display:none;">SIMULACION ACTIVA</span></div></div>';
         html += '<div class="chart-container"><canvas id="chartHistorico"></canvas></div>';
         html += '<div style="padding:12px;text-align:right;"><button class="brutalist-btn" id="btnRefreshChart" style="padding:8px 16px;font-size:12px;"><span class="material-icons-round" style="font-size:16px;">refresh</span> Actualizar</button></div></div>';
 
@@ -555,6 +562,23 @@ var DashboardModule = (function() {
         }
 
         chart = new Chart(canvas, chartConfig);
+
+        // Indicador de modo simulacion
+        updateSimulationBadge();
+    }
+
+    function updateSimulationBadge() {
+        var badge = document.getElementById('simModeBadge');
+        if (!badge) return;
+        var active = (typeof OverrideManager !== 'undefined' && OverrideManager.getActive)
+            ? (OverrideManager.getActive().length > 0)
+            : false;
+        if (active) {
+            badge.style.display = 'inline-flex';
+            badge.textContent = 'SIMULACION ACTIVA';
+        } else {
+            badge.style.display = 'none';
+        }
     }
 
     function val(id, fallback) {

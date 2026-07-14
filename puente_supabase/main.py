@@ -756,6 +756,122 @@ async def get_catalogo_plantas():
         return {"ok": False, "error": str(e), "plantas": []}
 
 
+# ============================================================
+# CONFIG BASELINES - Recibe valores base desde frontend
+# ============================================================
+
+# Estado en memoria de los baselines actuales (por dispositivo)
+_baselines_state = {}
+
+@app.post("/api/config/baselines", dependencies=[Depends(verify_bridge_key)])
+async def update_baselines(data: dict):
+    """Recibe baselines (valores estables de sensores en modo normal)
+    desde el frontend cuando se selecciona una planta o se ajusta config.
+
+    Body esperado:
+    {
+        "device_id": 1,
+        "maceta": 1,            # opcional, si no se envia aplica a todo
+        "temp": 24.5,           # baseline global
+        "hum_amb": 65.0,        # baseline global
+        "hum_suelo": 55.0,      # baseline de la maceta (si se envia maceta)
+        "ph": 6.8,              # baseline de la maceta
+        "planta_id": 5          # opcional, FK a catalogo_plantas
+    }
+    """
+    device_id = data.get("device_id")
+    if not device_id:
+        raise HTTPException(400, "device_id requerido")
+    maceta = data.get("maceta")
+    planta_id = data.get("planta_id")
+
+    try:
+        payload = {
+            "dispositivo_id": device_id,
+            "umbrales": {
+                "temp_min": data.get("temp_min", 15),
+                "temp_max": data.get("temp_max", 30),
+                "hum_amb_min": data.get("hum_amb_min", 30),
+                "hum_amb_max": data.get("hum_amb_max", 85),
+                "hum_suelo_min": data.get("hum_suelo_min", 40),
+                "hum_suelo_max": data.get("hum_suelo_max", 80),
+                "ph_min": data.get("ph_min", 5.5),
+                "ph_max": data.get("ph_max", 7.5),
+            },
+            "planta_id": planta_id,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # Upsert en configuracion
+        existing = await client.get(
+            f"{SUPABASE_URL}/rest/v1/configuracion",
+            params={"dispositivo_id": f"eq.{device_id}"},
+            headers=HEADERS_SERVICE,
+        )
+        if existing.status_code == 200 and existing.json():
+            row_id = existing.json()[0]["id"]
+            await client.patch(
+                f"{SUPABASE_URL}/rest/v1/configuracion?id=eq.{row_id}",
+                json=payload,
+                headers={**HEADERS_SERVICE, "Prefer": "return=minimal"},
+            )
+        else:
+            await client.post(
+                f"{SUPABASE_URL}/rest/v1/configuracion",
+                json=payload,
+                headers={**HEADERS_SERVICE, "Prefer": "return=minimal"},
+            )
+
+        # Cache en memoria para ESP32
+        key = (device_id, maceta)
+        _baselines_state[key] = {
+            "temp": data.get("temp"),
+            "hum_amb": data.get("hum_amb"),
+            "hum_suelo": data.get("hum_suelo"),
+            "ph": data.get("ph"),
+            "planta_id": planta_id,
+            "ts": time.time(),
+        }
+
+        return {"ok": True, "device_id": device_id, "maceta": maceta, "planta_id": planta_id}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/config/baselines/{device_id}")
+async def get_baselines(device_id: int, maceta: int = None):
+    """Devuelve los baselines actuales de un dispositivo (cache o Supabase)."""
+    key = (device_id, maceta)
+    if key in _baselines_state:
+        return {"ok": True, "source": "cache", **(_baselines_state[key]), "maceta": maceta}
+
+    try:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/configuracion",
+            params={"dispositivo_id": f"eq.{device_id}"},
+            headers=HEADERS_SERVICE,
+        )
+        if resp.status_code == 200 and resp.json():
+            row = resp.json()[0]
+            umbrales = row.get("umbrales", {})
+            return {
+                "ok": True,
+                "source": "supabase",
+                "planta_id": row.get("planta_id"),
+                "temp_min": umbrales.get("temp_min"),
+                "temp_max": umbrales.get("temp_max"),
+                "hum_amb_min": umbrales.get("hum_amb_min"),
+                "hum_amb_max": umbrales.get("hum_amb_max"),
+                "hum_suelo_min": umbrales.get("hum_suelo_min"),
+                "hum_suelo_max": umbrales.get("hum_suelo_max"),
+                "ph_min": umbrales.get("ph_min"),
+                "ph_max": umbrales.get("ph_max"),
+            }
+        return {"ok": False, "error": "Sin baselines para ese dispositivo"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 # WEBSOCKET - REALTIME DESDE SUPABASE
 # ============================================================
 
