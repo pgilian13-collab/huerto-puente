@@ -482,20 +482,45 @@ PH_CH   = [1, 3, 5, 7]
 # FUNCIONES MUX
 # ============================================================
 
-def leer_mux(canal):
+# Filtro EMA (Exponential Moving Average) por (maceta, tipo)
+# alpha=0.3 -> 30% lectura nueva, 70% hist\u00f3rico (suaviza sin congelar)
+_EMA_ALPHA = 0.3
+_ema_state = {}
+
+def _ema(key, nuevo):
+    """Aplica EMA y devuelve valor suavizado. None si es el primer sample."""
+    if key not in _ema_state:
+        _ema_state[key] = nuevo
+        return nuevo
+    suavizado = _EMA_ALPHA * nuevo + (1.0 - _EMA_ALPHA) * _ema_state[key]
+    _ema_state[key] = suavizado
+    return suavizado
+
+def leer_mux(canal, samples=5):
+    """Lee el MUX promediando N muestras. Descarta la primera (crosstalk).
+    Tiempo total: 50ms settle + N*5ms = ~75ms para 5 muestras.
+    """
     MUX_S0.value(canal & 1)
     MUX_S1.value((canal >> 1) & 1)
     MUX_S2.value((canal >> 2) & 1)
     MUX_S3.value((canal >> 3) & 1)
-    time.sleep_ms(20)
-    return MUX_SIG.read()
+    time.sleep_ms(50)
+    MUX_SIG.read()
+    total = 0
+    count = 0
+    for _ in range(samples):
+        total += MUX_SIG.read()
+        count += 1
+        time.sleep_ms(5)
+    return total // count
 
 def leer_suelo(maceta):
     raw = leer_mux(SOIL_CH[maceta - 1])
     if raw < 200 or raw > 3800:
         return None
     pct = int((raw - 1000) / (3500 - 1000) * 100)
-    return max(0, min(pct, 100))
+    pct = max(0, min(pct, 100))
+    return int(round(_ema(('s', maceta), float(pct))))
 
 def leer_ph(maceta):
     raw = leer_mux(PH_CH[maceta - 1])
@@ -504,7 +529,8 @@ def leer_ph(maceta):
     vadc = raw / 4095 * 3.3
     vph = vadc / 0.6
     ph = (4.2 - vph) / 0.3
-    return max(0.0, min(round(ph, 2), 14.0))
+    ph = max(0.0, min(ph, 14.0))
+    return round(_ema(('p', maceta), ph), 2)
 
 def leer_dht():
     for _ in range(3):
