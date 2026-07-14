@@ -7,16 +7,124 @@ var DashboardModule = (function() {
     var chart = null;
     var chartRefreshTimer = null;
 
+    var SENSOR_RANGES = {
+        temp:       { label: 'Temperatura',     unit: '\u00B0C', valId: 'temp',      minKey: 'temp_min',          maxKey: 'temp_max',          defMin: 15,  defMax: 30 },
+        hum_amb:    { label: 'Humedad Amb',     unit: '%',       valId: 'humAmb',    minKey: 'humAmb_min',         maxKey: 'humAmb_max',         defMin: 30,  defMax: 85 },
+        hum_suelo:  { label: 'Humedad Suelo',   unit: '%',       valId: 'humSuelo',  minKey: 'humSuelo_min',       maxKey: 'humSuelo_max',       defMin: 40,  defMax: 80 },
+        ph:         { label: 'pH Suelo',        unit: 'pH',      valId: 'ph',        minKey: 'ph_min',             maxKey: 'ph_max',             defMin: 5.5, defMax: 7.5 }
+    };
+
+    function getCurrentMacetaConfig() {
+        try {
+            var inv = AppState.get('currentInv') || 0;
+            var mac = AppState.get('currentMaceta') || 1;
+            var key = 'huerto_config_inv' + (inv + 1) + '_mac' + mac;
+            return JSON.parse(localStorage.getItem(key) || 'null');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getThreshold(minKey, maxKey, defMin, defMax) {
+        var cfg = getCurrentMacetaConfig();
+        var min = defMin, max = defMax;
+        if (cfg) {
+            if (minKey && cfg[minKey] !== undefined) min = cfg[minKey];
+            if (maxKey && cfg[maxKey] !== undefined) max = cfg[maxKey];
+        }
+        return { min: min, max: max };
+    }
+
+    function setSkeletonActive(active) {
+        try {
+            document.querySelectorAll('.sensor-card').forEach(function(card) {
+                if (card) card.classList.toggle('skeleton', !!active);
+            });
+        } catch (e) {}
+    }
+
+    function initTooltips() {
+        try {
+            document.querySelectorAll('.sensor-card[data-sensor]').forEach(function(card) {
+                var sensorKey = card.getAttribute('data-sensor');
+                if (!sensorKey || !SENSOR_RANGES[sensorKey]) return;
+                var info = SENSOR_RANGES[sensorKey];
+                var tip = card.querySelector('.sensor-tooltip');
+                if (!tip) {
+                    tip = document.createElement('div');
+                    tip.className = 'sensor-tooltip';
+                    card.appendChild(tip);
+                }
+                var valEl = document.getElementById(info.valId);
+                var valTxt = valEl ? (valEl.textContent || '').trim() : '--';
+                var th = getThreshold(info.minKey, info.maxKey, info.defMin, info.defMax);
+                var status = '';
+                if (valTxt && valTxt !== '--' && valTxt !== '-') {
+                    var numVal = parseFloat(valTxt);
+                    if (!isNaN(numVal)) {
+                        if (numVal < th.min || numVal > th.max) status = 'crit';
+                        else if (numVal < th.min * 1.1 || numVal > th.max * 0.9) status = 'warn';
+                    }
+                }
+                tip.innerHTML =
+                    '<div class="sensor-tooltip-row">' +
+                        '<span class="sensor-tooltip-label">Rango</span>' +
+                        '<span class="sensor-tooltip-val">' + th.min + ' - ' + th.max + ' ' + info.unit + '</span>' +
+                    '</div>' +
+                    '<div class="sensor-tooltip-row">' +
+                        '<span class="sensor-tooltip-label">Actual</span>' +
+                        '<span class="sensor-tooltip-val ' + status + '">' + valTxt + ' ' + info.unit + '</span>' +
+                    '</div>';
+            });
+        } catch (e) {
+            console.error('[DASHBOARD] initTooltips:', e);
+        }
+    }
+
     function init() {
         render();
-        loadData();
+        setSkeletonActive(true);
+        var p = loadData();
+        if (p && typeof p.then === 'function') {
+            p.then(function() {
+                setSkeletonActive(false);
+                initTooltips();
+            }).catch(function() {
+                setSkeletonActive(false);
+            });
+        } else {
+            setTimeout(function() { setSkeletonActive(false); initTooltips(); }, 600);
+        }
         EventBus.on('sensors:updated', onSensorsUpdated);
         EventBus.on('maceta:selected', onMacetaChanged);
+        EventBus.on('sidebar:selectInv', onInvernaderoChanged);
+    }
+
+    function onInvernaderoChanged(idx) {
+        var content = document.querySelector('.main-content');
+        if (content) content.classList.add('tab-exit');
+        setTimeout(function() {
+            setSkeletonActive(true);
+            render();
+            var p = loadData();
+            if (p && typeof p.then === 'function') {
+                p.then(function() {
+                    setSkeletonActive(false);
+                    initTooltips();
+                }).catch(function() {
+                    setSkeletonActive(false);
+                });
+            } else {
+                setTimeout(function() { setSkeletonActive(false); initTooltips(); }, 600);
+            }
+            if (content) content.classList.remove('tab-exit');
+        }, 250);
     }
 
     function destroy() {
         EventBus.off('sensors:updated', onSensorsUpdated);
         EventBus.off('maceta:selected', onMacetaChanged);
+        EventBus.off('sidebar:selectInv', onInvernaderoChanged);
         if (chartRefreshTimer) { clearTimeout(chartRefreshTimer); chartRefreshTimer = null; }
         if (chart) { chart.destroy(); chart = null; }
     }
@@ -228,6 +336,7 @@ var DashboardModule = (function() {
         var data = AppState.get('sensors') || {};
         updateSensors(data);
         loadChartData();
+        initTooltips();
         if (typeof OverrideManager !== 'undefined') OverrideManager.update();
     }
 
@@ -246,6 +355,9 @@ var DashboardModule = (function() {
         if (humAmbRow) setSensor('humAmb', humAmbRow.valor_lectura);
         if (humSueloRow) setSensor('humSuelo', humSueloRow.valor_lectura);
         if (phRow) setSensor('ph', phRow.valor_lectura);
+
+        setSkeletonActive(false);
+        initTooltips();
     }
 
     function setSensor(id, value) {
@@ -470,7 +582,7 @@ var DashboardModule = (function() {
         }
     }
 
-    return { init: init, destroy: destroy, loadConfigFromSupabase: loadConfigFromSupabase };
+    return { init: init, destroy: destroy, loadConfigFromSupabase: loadConfigFromSupabase, setSkeletonActive: setSkeletonActive, initTooltips: initTooltips, getThreshold: getThreshold };
 })();
 
 if (typeof window !== 'undefined') window.DashboardModule = DashboardModule;

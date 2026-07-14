@@ -82,6 +82,12 @@ var ConfigModule = (function() {
     function init() {
         loadFromSupabase().then(function() { render(); });
         cargarCatalogoPlantas();
+        EventBus.on('maceta:selected', function() {
+            setTimeout(showRecommendations, 50);
+        });
+        EventBus.on('sidebar:selectInv', function() {
+            setTimeout(showRecommendations, 50);
+        });
     }
     function destroy() {}
 
@@ -329,7 +335,104 @@ var ConfigModule = (function() {
         if (el) el.value = value;
     }
 
-    return { init: init, destroy: destroy, cargarCatalogoPlantas: cargarCatalogoPlantas };
+    function showRecommendations() {
+        var container = document.getElementById('plantRecommendations');
+        var list = document.getElementById('plantRecList');
+        if (!container || !list) return;
+
+        var inv = AppState.get('currentInv') || 0;
+        var currentMac = AppState.get('currentMaceta') || 1;
+
+        var otherMacetas = [];
+        for (var m = 1; m <= 4; m++) {
+            if (m === currentMac) continue;
+            try {
+                var key = 'huerto_config_inv' + (inv + 1) + '_mac' + m;
+                var saved = JSON.parse(localStorage.getItem(key) || 'null');
+                if (!saved) continue;
+                var plantId = null;
+                var planta = null;
+                var tk = 'huerto_planta_inv' + (inv + 1) + '_mac' + m;
+                var plantaSaved = JSON.parse(localStorage.getItem(tk) || 'null');
+                if (plantaSaved && plantaSaved.id) {
+                    plantId = plantaSaved.id;
+                    planta = allPlants.find(function(p) { return p.id === plantId; });
+                }
+                if (planta) {
+                    var tMin = (saved.temp_min !== undefined) ? saved.temp_min : planta.temp_min;
+                    var tMax = (saved.temp_max !== undefined) ? saved.temp_max : planta.temp_max;
+                    otherMacetas.push({ maceta: m, planta: planta, temp_min: tMin, temp_max: tMax });
+                }
+            } catch (e) {}
+        }
+
+        if (otherMacetas.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        var avgMin = 0, avgMax = 0;
+        for (var i = 0; i < otherMacetas.length; i++) {
+            avgMin += otherMacetas[i].temp_min;
+            avgMax += otherMacetas[i].temp_max;
+        }
+        avgMin /= otherMacetas.length;
+        avgMax /= otherMacetas.length;
+
+        var usedIds = {};
+        otherMacetas.forEach(function(o) { usedIds[o.planta.id] = true; });
+
+        var scored = allPlants
+            .filter(function(p) { return !usedIds[p.id]; })
+            .map(function(p) {
+                var overlapMin = Math.max(p.temp_min, avgMin);
+                var overlapMax = Math.min(p.temp_max, avgMax);
+                var overlap = Math.max(0, overlapMax - overlapMin);
+                var rangeSize = Math.max(p.temp_max - p.temp_min, 1);
+                var score = overlap / rangeSize;
+                return { p: p, score: score, overlap: overlap };
+            })
+            .filter(function(x) { return x.score > 0.3; })
+            .sort(function(a, b) { return b.score - a.score; })
+            .slice(0, 5);
+
+        if (scored.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        var othersInfo = otherMacetas.map(function(m) {
+            return 'MAC-' + (m.maceta < 10 ? '0' + m.maceta : m.maceta) + ': ' + m.planta.nombre + ' (' + m.temp_min + '-' + m.temp_max + '\u00B0C)';
+        }).join(', ');
+
+        var html = '<div class="plant-rec-others" style="padding:4px 10px;font-size:9px;color:var(--text-muted);font-family:JetBrains Mono,monospace;letter-spacing:0.5px;border-bottom:1px solid #222;">Ya configuradas: ' + othersInfo + '</div>';
+        for (var k = 0; k < scored.length; k++) {
+            var x = scored[k];
+            var pct = Math.round(x.score * 100);
+            var cls = pct >= 80 ? 'high' : 'med';
+            html += '<div class="plant-rec-item" data-plant-id="' + x.p.id + '">' +
+                '<span class="material-icons-round">eco</span>' +
+                '<span class="plant-rec-name">' + x.p.nombre + '</span>' +
+                '<span class="plant-rec-range">' + x.p.temp_min + '-' + x.p.temp_max + '\u00B0C</span>' +
+                '<span class="plant-rec-match ' + cls + '">' + pct + '%</span>' +
+            '</div>';
+        }
+        list.innerHTML = html;
+        container.style.display = 'block';
+
+        var items = list.querySelectorAll('.plant-rec-item');
+        for (var j = 0; j < items.length; j++) {
+            (function(item) {
+                item.addEventListener('click', function() {
+                    var pid = parseInt(item.getAttribute('data-plant-id'));
+                    seleccionarPlanta(pid);
+                    container.style.display = 'none';
+                });
+            })(items[j]);
+        }
+    }
+
+    return { init: init, destroy: destroy, cargarCatalogoPlantas: cargarCatalogoPlantas, showRecommendations: showRecommendations, seleccionarPlanta: seleccionarPlanta };
 })();
 
 if (typeof window !== 'undefined') window.ConfigModule = ConfigModule;

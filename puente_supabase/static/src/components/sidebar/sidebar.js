@@ -18,7 +18,7 @@ var SidebarComponent = (function() {
         var currentInv = AppState.get('currentInv') || 0;
 
         var html = '<div class="sidebar-header">';
-        html += '<img class="sidebar-logo-img" src="https://www.unheval.edu.pe/portal/wp-content/uploads/2025/02/logounh-324x84-1-300x78.png" alt="UNHEVAL">';
+        html += '<img class="sidebar-logo-img" src="https://www.unheval.edu.pe/portal/public/imagenes/unh/logounh-324x84-1-300x78.png" alt="UNHEVAL">';
         html += '<button class="sidebar-close" id="sidebarClose"><span class="material-icons-round">close</span></button>';
         html += '</div>';
 

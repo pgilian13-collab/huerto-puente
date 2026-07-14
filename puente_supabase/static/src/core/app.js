@@ -22,7 +22,10 @@ var App = (function() {
             return;
         }
 
-        // 3. Register routes (modules load lazily)
+        // 3. Init particles background
+        initParticles();
+
+        // 4. Register routes (modules load lazily)
         registerRoutes();
 
         // 4. Init core UI (sidebar + header)
@@ -48,6 +51,23 @@ var App = (function() {
         EventBus.on('maceta:changed', function(data) {
             AppState.set('currentMaceta', data.maceta);
             EventBus.emit('maceta:selected', data);
+        });
+
+        // 6b. Sidebar invernadero tab changed
+        EventBus.on('sidebar:selectInv', function(idx) {
+            if (typeof idx !== 'number') return;
+            AppState.batch({
+                currentInv: idx,
+                currentInvId: idx + 1,
+                currentMaceta: 1
+            });
+            SensorService.init(idx);
+            ActuatorService.fetchActuadores(idx);
+            if (typeof DashboardModule !== 'undefined') {
+                DashboardModule.setSkeletonActive(true);
+                DashboardModule.init();
+                setTimeout(function() { DashboardModule.initTooltips(); }, 700);
+            }
         });
 
         // 7. Listen for simulation alerts
@@ -368,6 +388,53 @@ var App = (function() {
             toast.classList.remove('show');
             setTimeout(function() { toast.remove(); }, 300);
         }, 3000);
+    }
+
+    function initParticles() {
+        try {
+            var canvas = document.getElementById('particleCanvas');
+            if (!canvas) return;
+            var ctx = canvas.getContext('2d');
+            var particles = [];
+            var w, h;
+
+            function resize() {
+                w = canvas.width = window.innerWidth;
+                h = canvas.height = window.innerHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            for (var i = 0; i < 50; i++) {
+                particles.push({
+                    x: Math.random() * (canvas.width || w),
+                    y: Math.random() * (canvas.height || h),
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: (Math.random() - 0.5) * 0.3,
+                    size: Math.random() * 1.5 + 0.5,
+                    alpha: Math.random() * 0.4 + 0.1
+                });
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, w, h);
+                for (var j = 0; j < particles.length; j++) {
+                    var p = particles[j];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    if (p.x < 0 || p.x > w) p.vx *= -1;
+                    if (p.y < 0 || p.y > h) p.vy *= -1;
+                    ctx.fillStyle = 'rgba(180,180,200,' + p.alpha + ')';
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                requestAnimationFrame(draw);
+            }
+            draw();
+        } catch (e) {
+            console.warn('[PARTICLES] init failed:', e);
+        }
     }
 
     return { init: init, logout: logout };
