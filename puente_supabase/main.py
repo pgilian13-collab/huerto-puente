@@ -28,8 +28,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Directorio del frontend (unificado, sin duplicar en static/)
-FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend")
+# Directorio del frontend
+# En Render: sirve desde static/ (synced desde frontend/)
+# En local: sirve desde ../frontend/ directamente
+_base = os.path.dirname(os.path.abspath(__file__))
+_frontend_candidate = os.path.join(_base, "..", "frontend")
+if os.path.isdir(_frontend_candidate):
+    FRONTEND_DIR = _frontend_candidate
+else:
+    FRONTEND_DIR = os.path.join(_base, "static")
 
 # ============================================================
 # CONFIGURACION
