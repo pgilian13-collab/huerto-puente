@@ -9,7 +9,7 @@ var ModuleLoader = (function() {
     var loaded = {};
     var loading = {};
     var basePath = '';
-    var CACHE_BUST = '?v=7';
+    var CACHE_BUST = '?v=12';
 
     function setBase(path) {
         basePath = path;
