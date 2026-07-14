@@ -6,10 +6,10 @@
 // ============================================================
 
 var ApiService = (function() {
-    var SUPABASE_URL = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_URL : '';
-    var SUPABASE_KEY = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_ANON_KEY : '';
-    var BRIDGE_URL = (typeof CONFIG !== 'undefined') ? CONFIG.BRIDGE_URL : '';
-    var BRIDGE_KEY = (typeof CONFIG !== 'undefined') ? CONFIG.BRIDGE_KEY : '';
+    var SUPABASE_URL = (typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL) ? CONFIG.SUPABASE_URL : 'https://nzicdhwoficzsafhdxmq.supabase.co';
+    var SUPABASE_KEY = (typeof CONFIG !== 'undefined' && (CONFIG.SUPABASE_SERVICE_KEY || CONFIG.SUPABASE_KEY)) ? (CONFIG.SUPABASE_SERVICE_KEY || CONFIG.SUPABASE_KEY) : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56aWNkaHdvZmljenNhZmhkeG1xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDc4MTg0MywiZXhwIjoyMDk2MzU3ODQzfQ.Al5773jpjE6YiQ_hzyLVAVIzzgk0DkU8xQPMGkjXtOU';
+    var BRIDGE_URL = (typeof CONFIG !== 'undefined' && CONFIG.BRIDGE_URL) ? CONFIG.BRIDGE_URL : 'https://huerto-puente.onrender.com';
+    var BRIDGE_KEY = (typeof CONFIG !== 'undefined' && CONFIG.BRIDGE_KEY) ? CONFIG.BRIDGE_KEY : 'huerto-ccss-2026';
 
     function headers() {
         return {
@@ -75,7 +75,7 @@ var ApiService = (function() {
         get: get, post: post, patch: patch, del: del,
         sbQuery: sbQuery, sbInsert: sbInsert, sbPatch: sbPatch,
         bridgeGet: bridgeGet, bridgePost: bridgePost, bridgePatch: bridgePatch,
-        BRIDGE_URL: BRIDGE_URL, SUPABASE_URL: SUPABASE_URL
+        BRIDGE_URL: BRIDGE_URL, SUPABASE_URL: SUPABASE_URL, SUPABASE_KEY: SUPABASE_KEY
     };
 })();
 

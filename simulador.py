@@ -24,7 +24,7 @@ from datetime import datetime, timezone, timedelta
 
 BRIDGE_URL = "https://huerto-puente.onrender.com"
 MODULE_ID = 1  # Cambiar 1-5 segun invernadero en Wokwi
-INTERVALO = 5  # Segundos entre envios
+INTERVALO = 15  # Segundos entre envios (mismo que ESP32 DB_SYNC_INTERVAL)
 
 # Valores base por modulo (simulan condiciones reales)
 MODULOS = {

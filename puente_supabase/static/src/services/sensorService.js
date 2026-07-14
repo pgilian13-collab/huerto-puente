@@ -93,7 +93,7 @@ var SensorService = (function() {
 
         try {
             var sbUrl = ApiService.SUPABASE_URL;
-            var sbKey = (typeof CONFIG !== 'undefined') ? CONFIG.SUPABASE_ANON_KEY : '';
+            var sbKey = ApiService.SUPABASE_KEY || '';
             var client = supabase.createClient(sbUrl, sbKey);
 
             realtimeChannel = client

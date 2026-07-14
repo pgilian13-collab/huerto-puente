@@ -25,6 +25,20 @@ WIFI_PASS = ""
 BRIDGE_URL = "https://huerto-puente.onrender.com"
 BRIDGE_KEY = "huerto-ccss-2026"
 
+# Configuracion dinámica (actualizada desde Supabase via piggyback)
+CFG_TEMP_MIN = 15
+CFG_TEMP_MAX = 30
+CFG_HUM_AMB_MIN = 30
+CFG_HUM_AMB_MAX = 85
+CFG_HUM_SUELO_MIN = 40
+CFG_HUM_SUELO_MAX = 80
+CFG_PH_MIN = 5.5
+CFG_PH_MAX = 7.5
+
+# Frecuencia de escritura a Supabase (en ciclos de 0.5s)
+# 10 ciclos = 5 segundos, 15 = 7.5s, 20 = 10s, 30 = 15s
+DB_SYNC_INTERVAL = 10
+
 # ============================================================
 # SENSOR OVERRIDE - Forzado de valores por software
 # ============================================================
@@ -228,45 +242,45 @@ class LazoCerrado:
         acciones = []
         
         # === BOMBA DE RIEGO ===
-        # Se activa cuando humedad del suelo < 30% (critico)
-        # Se apaga cuando humedad del suelo > 55% (recuperacion)
+        # Se activa cuando humedad del suelo < hum_suelo_min (critico)
+        # Se apaga cuando humedad del suelo > hum_suelo_max (recuperacion)
         if hum_suelo is not None:
-            if hum_suelo < 30:
+            if hum_suelo < CFG_HUM_SUELO_MIN:
                 if not self.actuadores_estado[maceta].get('bomba'):
                     acciones.append(('bomba', 'ON'))
                     self.actuadores_estado[maceta]['bomba'] = True
                     print("[LAZO] MAC-{} Bomba ON (hum_suelo={})".format(maceta, hum_suelo))
-            elif hum_suelo > 55:
+            elif hum_suelo > CFG_HUM_SUELO_MAX:
                 if self.actuadores_estado[maceta].get('bomba'):
                     acciones.append(('bomba', 'OFF'))
                     self.actuadores_estado[maceta]['bomba'] = False
                     print("[LAZO] MAC-{} Bomba OFF (hum_suelo={})".format(maceta, hum_suelo))
         
         # === VENTILADOR ===
-        # Se activa cuando temp > 35 C (critico) o humedad ambiente > 85%
-        # Se apaga cuando temp < 30 C y humedad < 75%
+        # Se activa cuando temp > temp_max o humedad ambiente > hum_amb_max
+        # Se apaga cuando temp < (temp_max - 5) y humedad < (hum_amb_max - 10)
         if temp is not None:
-            if temp > 35 or (hum_amb is not None and hum_amb > 85):
+            if temp > CFG_TEMP_MAX or (hum_amb is not None and hum_amb > CFG_HUM_AMB_MAX):
                 if not self.actuadores_estado[maceta].get('ventilador'):
                     acciones.append(('ventilador', 'ON'))
                     self.actuadores_estado[maceta]['ventilador'] = True
                     print("[LAZO] MAC-{} Ventilador ON (temp={}, hum_amb={})".format(maceta, temp, hum_amb))
-            elif temp < 30 and (hum_amb is None or hum_amb < 75):
+            elif temp < (CFG_TEMP_MAX - 5) and (hum_amb is None or hum_amb < (CFG_HUM_AMB_MAX - 10)):
                 if self.actuadores_estado[maceta].get('ventilador'):
                     acciones.append(('ventilador', 'OFF'))
                     self.actuadores_estado[maceta]['ventilador'] = False
                     print("[LAZO] MAC-{} Ventilador OFF (temp={})".format(maceta, temp))
         
         # === PULVERIZADOR ===
-        # Se activa cuando humedad ambiente < 20% (critico) o temp > 35 C
-        # Se apaga cuando humedad ambiente > 50%
+        # Se activa cuando humedad ambiente < hum_amb_min o temp > temp_max
+        # Se apaga cuando humedad ambiente > (hum_amb_min + 30)
         if hum_amb is not None:
-            if hum_amb < 20 or (temp is not None and temp > 35):
+            if hum_amb < CFG_HUM_AMB_MIN or (temp is not None and temp > CFG_TEMP_MAX):
                 if not self.actuadores_estado[maceta].get('pulverizador'):
                     acciones.append(('pulverizador', 'ON'))
                     self.actuadores_estado[maceta]['pulverizador'] = True
                     print("[LAZO] MAC-{} Pulverizador ON (hum_amb={}, temp={})".format(maceta, hum_amb, temp))
-            elif hum_amb > 50:
+            elif hum_amb > (CFG_HUM_AMB_MIN + 30):
                 if self.actuadores_estado[maceta].get('pulverizador'):
                     acciones.append(('pulverizador', 'OFF'))
                     self.actuadores_estado[maceta]['pulverizador'] = False
@@ -670,16 +684,24 @@ def sync_with_bridge(lecturas_db):
     for l in lecturas_db:
         sensors[str(l["sensor_id"])] = l["valor"]
     payload["sensors"] = sensors
+
+    # Log detallado para diagnóstico
+    print("[SYNC] Sending {} sensors to Bridge...".format(len(sensors)))
+
     code, resp = _http_post("/api/sync", payload, timeout=10)
 
     if code == 0 or resp is None:
         wifi_fail_count += 1
-        print("[SYNC] FAIL ({})".format(wifi_fail_count))
+        print("[SYNC] FAIL code={} resp={} ({})".format(code, resp, wifi_fail_count))
         return False
 
     wifi_fail_count = 0
     written = resp.get("sensors_written", 0)
-    print("[SYNC] {} sensors sent, code={}".format(written, code))
+    ok = resp.get("ok", False)
+    print("[SYNC] code={} ok={} written={} sensors={}".format(code, ok, written, list(sensors.keys())))
+
+    if not ok:
+        print("[SYNC] Bridge error: sensors_failed={}".format(resp.get("sensors_failed", 0)))
 
     # Process commands from response
     commands = resp.get("commands", [])
@@ -746,6 +768,23 @@ def sync_with_bridge(lecturas_db):
     for key in list(sensor_override.overrides.keys()):
         if key not in active_keys:
             sensor_override._clear_override(key[0], key[1])
+
+    # Update dynamic config from response
+    cfg = resp.get("config", {})
+    if cfg:
+        global CFG_TEMP_MIN, CFG_TEMP_MAX, CFG_HUM_AMB_MIN, CFG_HUM_AMB_MAX
+        global CFG_HUM_SUELO_MIN, CFG_HUM_SUELO_MAX, CFG_PH_MIN, CFG_PH_MAX
+        CFG_TEMP_MIN = cfg.get("temp_min", CFG_TEMP_MIN)
+        CFG_TEMP_MAX = cfg.get("temp_max", CFG_TEMP_MAX)
+        CFG_HUM_AMB_MIN = cfg.get("hum_amb_min", CFG_HUM_AMB_MIN)
+        CFG_HUM_AMB_MAX = cfg.get("hum_amb_max", CFG_HUM_AMB_MAX)
+        CFG_HUM_SUELO_MIN = cfg.get("hum_suelo_min", CFG_HUM_SUELO_MIN)
+        CFG_HUM_SUELO_MAX = cfg.get("hum_suelo_max", CFG_HUM_SUELO_MAX)
+        CFG_PH_MIN = cfg.get("ph_min", CFG_PH_MIN)
+        CFG_PH_MAX = cfg.get("ph_max", CFG_PH_MAX)
+        print("[CFG] Temp:{}-{} HumAmb:{}-{} HumSuelo:{}-{} Ph:{}-{}".format(
+            CFG_TEMP_MIN, CFG_TEMP_MAX, CFG_HUM_AMB_MIN, CFG_HUM_AMB_MAX,
+            CFG_HUM_SUELO_MIN, CFG_HUM_SUELO_MAX, CFG_PH_MIN, CFG_PH_MAX))
 
     # Cleanup if needed
     if resp.get("cleanup"):
@@ -829,25 +868,25 @@ def evaluar_alertas(datos, maceta_num=None):
     alerta = False
 
     if temp is not None:
-        if temp > 35 or temp < 10:
+        if temp > CFG_TEMP_MAX or temp < CFG_TEMP_MIN:
             critico = True
-        elif temp > 30 or temp < 15:
+        elif temp > (CFG_TEMP_MAX - 5) or temp < (CFG_TEMP_MIN + 5):
             alerta = True
 
     if hum_suelo is not None:
-        if hum_suelo < 30:
+        if hum_suelo < CFG_HUM_SUELO_MIN:
             critico = True
-        elif hum_suelo < 40 or hum_suelo > 80:
+        elif hum_suelo < (CFG_HUM_SUELO_MIN + 10) or hum_suelo > (CFG_HUM_SUELO_MAX):
             alerta = True
 
     if hum_amb is not None:
-        if hum_amb > 85 or hum_amb < 20:
+        if hum_amb > CFG_HUM_AMB_MAX or hum_amb < CFG_HUM_AMB_MIN:
             critico = True
 
     if ph is not None:
-        if ph < 4.5 or ph > 9.0:
+        if ph < CFG_PH_MIN or ph > CFG_PH_MAX:
             critico = True
-        elif ph < 5.5 or ph > 7.5:
+        elif ph < (CFG_PH_MIN + 1) or ph > (CFG_PH_MAX - 1):
             alerta = True
 
     if maceta_num is not None:
@@ -894,6 +933,10 @@ sync_counter = 0
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
 print("=== MODO HIBRIDO ACTIVADO ===")
+print("[CFG] Defaults: Temp:{}-{} HumAmb:{}-{} HumSuelo:{}-{} Ph:{}-{}".format(
+    CFG_TEMP_MIN, CFG_TEMP_MAX, CFG_HUM_AMB_MIN, CFG_HUM_AMB_MAX,
+    CFG_HUM_SUELO_MIN, CFG_HUM_SUELO_MAX, CFG_PH_MIN, CFG_PH_MAX))
+print("[CFG] DB sync cada {}s ({} ciclos)".format(DB_SYNC_INTERVAL * 0.5, DB_SYNC_INTERVAL))
 
 while True:
     try:
@@ -952,7 +995,7 @@ while True:
         gc.collect()
         if wifi_ok:
             sync_counter += 1
-            if sync_counter >= 14:
+            if sync_counter >= DB_SYNC_INTERVAL:
                 sync_counter = 0
                 sync_with_bridge(lecturas_db)
 

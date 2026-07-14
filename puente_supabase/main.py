@@ -14,6 +14,7 @@ import os
 import json
 import asyncio
 import socket
+import time
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
@@ -22,6 +23,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Head
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -69,6 +71,7 @@ async def lifespan(app: FastAPI):
     print(f"  Supabase: {SUPABASE_URL}")
     print(f"  Packet Tracer: {PT_HOST}:{PT_PORT}")
     print(f"  Security: {'API key active' if BRIDGE_SECRET_KEY else 'NO API KEY SET'}")
+    print(f"  Almacenamiento: INSERT monitoreo_lecturas (frontend compatible)")
     print("=" * 50)
     yield
     await client.aclose()
@@ -150,7 +153,7 @@ async def sync_device(data: dict):
     sensors_ok = 0
     sensors_failed = 0
 
-    # 1) Batch insert sensor readings (single POST to Supabase)
+    # 1) Batch insert into monitoreo_lecturas (table that frontend reads from)
     if sensors:
         batch = []
         for sensor_id_str, valor in sensors.items():
@@ -171,9 +174,10 @@ async def sync_device(data: dict):
                 sensors_ok = len(batch)
             else:
                 sensors_failed = len(batch)
+                print(f"[SYNC] Insert error: {resp.status_code} {resp.text[:200]}")
         except Exception as e:
             sensors_failed = len(batch)
-            print(f"[SYNC] Batch insert error: {e}")
+            print(f"[SYNC] Insert error: {e}")
 
     # 2) Only query commands + overrides if ESP32 requests them
     commands = []
@@ -217,8 +221,43 @@ async def sync_device(data: dict):
                 pass
             return []
 
-        raw_cmds, raw_overrides = await asyncio.gather(
-            fetch_commands(), fetch_overrides()
+        async def fetch_config():
+            try:
+                resp = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/configuracion",
+                    params={"dispositivo_id": f"eq.{device_id}"},
+                    headers=HEADERS_SERVICE,
+                )
+                if resp.status_code == 200 and resp.json():
+                    row = resp.json()[0]
+                    umbrales = row.get("umbrales", {})
+                    def clamped(key, subkey, lo, hi, default):
+                        try:
+                            v = float(umbrales.get(key, {}).get(subkey, default))
+                            return max(lo, min(hi, v))
+                        except (TypeError, ValueError):
+                            return default
+                    return {
+                        "temp_min": clamped("temp", "min", -10, 50, 15),
+                        "temp_max": clamped("temp", "max", -10, 50, 30),
+                        "hum_amb_min": clamped("humAmb", "min", 0, 100, 30),
+                        "hum_amb_max": clamped("humAmb", "max", 0, 100, 85),
+                        "hum_suelo_min": clamped("humSuelo", "min", 0, 100, 40),
+                        "hum_suelo_max": clamped("humSuelo", "max", 0, 100, 80),
+                        "ph_min": clamped("ph", "min", 0, 14, 5.5),
+                        "ph_max": clamped("ph", "max", 0, 14, 7.5),
+                    }
+            except Exception:
+                pass
+            return {
+                "temp_min": 15, "temp_max": 30,
+                "hum_amb_min": 30, "hum_amb_max": 85,
+                "hum_suelo_min": 40, "hum_suelo_max": 80,
+                "ph_min": 5.5, "ph_max": 7.5,
+            }
+
+        raw_cmds, raw_overrides, config = await asyncio.gather(
+            fetch_commands(), fetch_overrides(), fetch_config()
         )
         commands = raw_cmds
         overrides = raw_overrides
@@ -276,6 +315,7 @@ async def sync_device(data: dict):
         "sensors_failed": sensors_failed,
         "commands": commands,
         "overrides": overrides,
+        "config": config if pending else {},
         "cleanup": cleanup_needed,
     }
 
@@ -440,6 +480,46 @@ async def listar_dispositivos():
         return resp.json()
     except Exception:
         return []
+
+
+@app.get("/api/configuracion/{dispositivo_id}")
+async def obtener_configuracion(dispositivo_id: int):
+    """Obtiene umbrales de configuración para un dispositivo desde Supabase."""
+    def clamped(key, subkey, lo, hi, default):
+        try:
+            v = float(umbrales.get(key, {}).get(subkey, default))
+            return max(lo, min(hi, v))
+        except (TypeError, ValueError):
+            return default
+    defaults = {
+        "temp_min": 15, "temp_max": 30,
+        "hum_amb_min": 30, "hum_amb_max": 85,
+        "hum_suelo_min": 40, "hum_suelo_max": 80,
+        "ph_min": 5.5, "ph_max": 7.5,
+    }
+    try:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/configuracion",
+            params={"dispositivo_id": f"eq.{dispositivo_id}"},
+            headers=HEADERS_SERVICE,
+        )
+        if resp.status_code == 200 and resp.json():
+            row = resp.json()[0]
+            umbrales = row.get("umbrales", {})
+            return {
+                "dispositivo_id": dispositivo_id,
+                "temp_min": clamped("temp", "min", -10, 50, 15),
+                "temp_max": clamped("temp", "max", -10, 50, 30),
+                "hum_amb_min": clamped("humAmb", "min", 0, 100, 30),
+                "hum_amb_max": clamped("humAmb", "max", 0, 100, 85),
+                "hum_suelo_min": clamped("humSuelo", "min", 0, 100, 40),
+                "hum_suelo_max": clamped("humSuelo", "max", 0, 100, 80),
+                "ph_min": clamped("ph", "min", 0, 14, 5.5),
+                "ph_max": clamped("ph", "max", 0, 14, 7.5),
+            }
+        return {"dispositivo_id": dispositivo_id, **defaults}
+    except Exception:
+        return {"dispositivo_id": dispositivo_id, **defaults}
 
 
 @app.get("/api/lecturas/{dispositivo_id}")
@@ -722,9 +802,153 @@ async def health():
     }
 
 
+@app.get("/api/test-db")
+async def test_db():
+    """Test de conexión a Supabase y tabla monitoreo_lecturas."""
+    results = {"supabase_url": bool(SUPABASE_URL), "tests": []}
+
+    # Test 1: Conexión general
+    try:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/sectores?select=id&limit=1",
+            headers=HEADERS_SERVICE,
+        )
+        results["tests"].append({
+            "name": "supabase_connection",
+            "status": "ok" if resp.status_code == 200 else "error",
+            "code": resp.status_code,
+        })
+    except Exception as e:
+        results["tests"].append({"name": "supabase_connection", "status": "error", "detail": str(e)})
+
+    # Test 2: Tabla monitoreo_lecturas existe
+    try:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas?select=id&limit=1",
+            headers=HEADERS_SERVICE,
+        )
+        results["tests"].append({
+            "name": "monitoreo_lecturas_readable",
+            "status": "ok" if resp.status_code == 200 else "error",
+            "code": resp.status_code,
+            "detail": resp.text[:200] if resp.status_code != 200 else "accessible",
+        })
+    except Exception as e:
+        results["tests"].append({"name": "monitoreo_lecturas_readable", "status": "error", "detail": str(e)})
+
+    # Test 3: INSERT en monitoreo_lecturas
+    try:
+        test_payload = [{"sensor_id": 999, "valor_lectura": 0.0}]
+        resp = await client.post(
+            f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas",
+            json=test_payload,
+            headers={**HEADERS_SERVICE, "Prefer": "return=minimal"},
+        )
+        results["tests"].append({
+            "name": "monitoreo_lecturas_writable",
+            "status": "ok" if resp.status_code in (200, 201, 204) else "error",
+            "code": resp.status_code,
+            "detail": resp.text[:200] if resp.status_code not in (200, 201, 204) else "writable",
+        })
+        # Cleanup: delete test row
+        if resp.status_code in (200, 201, 204):
+            await client.delete(
+                f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas?sensor_id=eq.999",
+                headers=HEADERS_SERVICE,
+            )
+    except Exception as e:
+        results["tests"].append({"name": "monitoreo_lecturas_writable", "status": "error", "detail": str(e)})
+
+    # Test 4: Contar registros
+    try:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas?select=count&limit=1",
+            headers={**HEADERS_SERVICE, "Prefer": "count=exact"},
+        )
+        count = "unknown"
+        if resp.status_code == 200:
+            content_range = resp.headers.get("content-range", "")
+            if "/" in content_range:
+                count = content_range.split("/")[1]
+        results["tests"].append({
+            "name": "monitoreo_lecturas_count",
+            "status": "ok",
+            "count": count,
+        })
+    except Exception as e:
+        results["tests"].append({"name": "monitoreo_lecturas_count", "status": "error", "detail": str(e)})
+
+    return results
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# ============================================================
+# HUERTO CHALLENGE — Scores & Ranking
+# ============================================================
+
+class ChallengeScore(BaseModel):
+    player_name: str = Field(..., min_length=1, max_length=50)
+    total_score: int = Field(..., ge=0)
+    correct_count: int = Field(0, ge=0)
+    rounds_played: int = Field(0, ge=0)
+    plant_stage: int = Field(0, ge=0, le=5)
+
+
+@app.post("/api/challenge/score")
+async def save_challenge_score(data: ChallengeScore):
+    """Guarda una puntuación del juego Huerto Challenge en Supabase."""
+    try:
+        payload = {
+            "player_name": data.player_name.strip(),
+            "total_score": data.total_score,
+            "correct_count": data.correct_count,
+            "rounds_played": data.rounds_played,
+            "plant_stage": data.plant_stage,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        resp = await client.post(
+            f"{SUPABASE_URL}/rest/v1/challenge_scores",
+            json=payload,
+            headers=HEADERS_SERVICE,
+        )
+        if resp.status_code in (200, 201):
+            return {"success": True, "message": "Puntuación guardada"}
+        return {"success": False, "message": f"Error Supabase: {resp.status_code}"}
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
+@app.get("/api/challenge/ranking")
+async def get_challenge_ranking(limit: int = 10):
+    """Obtiene el ranking de mejores puntuaciones del Huerto Challenge."""
+    try:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/challenge_scores",
+            params={
+                "select": "player_name,total_score,plant_stage",
+                "order": "total_score.desc,created_at.asc",
+                "limit": str(max(1, min(50, limit))),
+            },
+            headers=HEADERS_SERVICE,
+        )
+        if resp.status_code == 200:
+            rows = resp.json()
+            ranking = []
+            for i, row in enumerate(rows):
+                ranking.append({
+                    "position": i + 1,
+                    "player_name": row.get("player_name", ""),
+                    "total_score": row.get("total_score", 0),
+                    "plant_stage": row.get("plant_stage", 0),
+                })
+            return {"ranking": ranking}
+        return {"ranking": []}
+    except Exception:
+        return {"ranking": []}
 
 # Archivos estaticos del frontend (al final para no capturar API routes)
 app.mount("/css", StaticFiles(directory="static/css"), name="css")

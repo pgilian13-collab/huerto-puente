@@ -31,14 +31,15 @@ Frontend (Render static) <--- Supabase Realtime / REST ---> Browser
 ```
 Cada 0.5s:
   ESP32 lee DHT22 (temp, hum_amb) + MUX (4x hum_suelo + 4x ph) = 10 sensores
-  Cada 7s (sync_counter >= 14):
+  Control automático inmediato (lazo_cerrado + evaluar_alertas)
+  Cada 5s (DB_SYNC_INTERVAL = 10 ciclos):
     ESP32 POST /api/sync {device: 1, sensors: {0: 25.3, 1: 65.1, ...}, pending: true}
-    Bridge recibe, batch inserta en monitoreo_lecturas (1 POST a Supabase)
+    Bridge INSERT en monitoreo_lecturas (1 batch POST a Supabase)
     Bridge consulta commands + overrides pendientes (en paralelo)
-    Bridge responde: {ok, sensors_written, commands: [...], overrides: [...]}
-    ESP32 aplica commands (relays) y overrides (3 fases)
+    Bridge responde: {ok, sensors_written, commands: [...], overrides: [...], config: {...}}
+    ESP32 aplica commands (relays), overrides (3 fases) y actualiza CFG_* desde config
   Frontend (cada 2s via Realtime o polling):
-    Consulta monitoreo_lecturas REST -> actualiza sensores + grafico
+    Consulta monitoreo_lecturas REST -> actualiza sensores + gráfico
 ```
 
 ### 2. Flujo de simulacion (Frontend -> ESP32)
@@ -47,7 +48,7 @@ Cada 0.5s:
 2. Frontend valida: si valor dentro de umbrales configurados, RECHAZA con toast
 3. Frontend POST /api/simulacion/alerta al Bridge
 4. Bridge inserta en tabla simulacion_alertas (activa=true)
-5. En el proximo cycle del ESP32 (cada 7s), piggyback lee overrides
+5. En el proximo cycle del ESP32 (cada 15s), piggyback lee overrides
 6. ESP32 activa SensorOverride:
    a. DEGRADING (21s): valor fisico -> valor critico (7 pasos x 3s)
    b. HOLDING (2s): se mantiene en critico
@@ -72,17 +73,20 @@ Cada 0.5s:
 ```
 Cada ciclo, por cada maceta:
   evaluar_alertas(datos, maceta):
-    - Si temp > 35 o < 10 -> critico (LED naranja ON, LED rojo maceta ON)
-    - Si hum_suelo < 30 -> critico
-    - Si hum_amb > 85 o < 20 -> critico
-    - Si ph < 4.5 o > 9.0 -> critico
+    - Si temp > CFG_TEMP_MAX o < CFG_TEMP_MIN -> critico (LED naranja ON, LED rojo maceta ON)
+    - Si hum_suelo < CFG_HUM_SUELO_MIN -> critico
+    - Si hum_amb > CFG_HUM_AMB_MAX o < CFG_HUM_AMB_MIN -> critico
+    - Si ph < CFG_PH_MIN o > CFG_PH_MAX -> critico
     - Si no hay critico pero hay alerta -> LED amarillo
     - Si todo normal -> LED verde
 
   lazo_cerrado.evaluar(maceta, datos):
-    - Bomba ON si hum_suelo < 30, OFF si > 55
-    - Ventilador ON si temp > 35 o hum_amb > 85, OFF si temp < 30 y hum_amb < 75
-    - Pulverizador ON si hum_amb < 20 o temp > 35, OFF si hum_amb > 50
+    - Bomba ON si hum_suelo < CFG_HUM_SUELO_MIN, OFF si > CFG_HUM_SUELO_MAX
+    - Ventilador ON si temp > CFG_TEMP_MAX o hum_amb > CFG_HUM_AMB_MAX, OFF si temp < (CFG_TEMP_MAX-5) y hum_amb < (CFG_HUM_AMB_MAX-10)
+    - Pulverizador ON si hum_amb < CFG_HUM_AMB_MIN o temp > CFG_TEMP_MAX, OFF si hum_amb > (CFG_HUM_AMB_MIN+30)
+
+  Los CFG_* se actualizan via piggyback cada 7 segundos desde Supabase.
+  Defaults si no hay config: temp 15-30, humAmb 30-85, humSuelo 40-80, ph 5.5-7.5
 ```
 
 ### 5. Flujo de umbrales (Configuracion)
@@ -154,6 +158,12 @@ Frontend (config.js o dashboard.js):
 ### dispositivos
 - 5 registros (IDs 1-5)
 
+### challenge_scores
+- `id` (bigserial), `player_name` (text), `total_score` (int), `correct_count` (int), `rounds_played` (int), `plant_stage` (int), `created_at` (timestamptz)
+- Índices: total_score DESC, created_at DESC
+- RLS: SELECT público, INSERT anónimo
+- Módulo independiente del IoT
+
 ## ESP32 — Pin Mapping (main.py)
 
 ### MUX CD74HC4067
@@ -195,7 +205,8 @@ Frontend (config.js o dashboard.js):
 
 ### Ciclo de lectura
 - Loop cada 0.5s
-- `sync_counter >= 14` (7 segundos) envia todo via piggyback
+- `DB_SYNC_INTERVAL = 10` (5 segundos) envia todo via piggyback
+- Bridge INSERT en monitoreo_lecturas (1 batch POST)
 - `heartbeat_timer >= 20` (10 segundos) mantiene Render despierto
 - OLED cicla cada 3s
 
@@ -206,9 +217,9 @@ Frontend (config.js o dashboard.js):
 - TTL: 120 segundos, luego expira
 
 ### Lazo cerrado (automatico)
-- Bomba: ON si hum_suelo < 30, OFF si > 55
-- Ventilador: ON si temp > 35 o hum_amb > 85, OFF si temp < 30 y hum_amb < 75
-- Pulverizador: ON si hum_amb < 20 o temp > 35, OFF si hum_amb > 50
+- Bomba: ON si hum_suelo < CFG_HUM_SUELO_MIN, OFF si > CFG_HUM_SUELO_MAX
+- Ventilador: ON si temp > CFG_TEMP_MAX o hum_amb > CFG_HUM_AMB_MAX, OFF si temp < (CFG_TEMP_MAX-5) y hum_amb < (CFG_HUM_AMB_MAX-10)
+- Pulverizador: ON si hum_amb < CFG_HUM_AMB_MIN o temp > CFG_TEMP_MAX, OFF si hum_amb > (CFG_HUM_AMB_MIN+30)
 
 ### Sensores None detection
 - `leer_suelo()` / `leer_ph()` retornan None si raw ADC < 200 o > 3800 (pines flotantes)
@@ -219,13 +230,15 @@ Frontend (config.js o dashboard.js):
 - `POST /api/sync` — Piggyback: ESP32 envia sensores + recibe comandos + overrides en 1 llamada
 - `POST /api/simulacion/alerta` — Frontend crea alerta de simulacion
 - `POST /api/comando` — Frontend envia comando de actuador
+- `POST /api/challenge/score` — Guarda puntuación del juego
+- `GET /api/challenge/ranking` — Ranking de mejores puntuaciones (?limit=10)
 - `GET /ping` — Heartbeat
 - `GET /health` — Estado del sistema
 
 ### Protocolo piggyback
 ```
 ESP32 POST /api/sync {device: 1, sensors: {0: 25.3, 1: 65.1, ...}, pending: true}
-Bridge responde: {ok: true, sensors_written: 10, commands: [...], overrides: [...], cleanup: false}
+Bridge responde: {ok: true, sensors_written: 10, commands: [...], overrides: [...], config: {...}}
 ```
 
 ## Frontend — Arquitectura SPA
