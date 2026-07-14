@@ -740,6 +740,22 @@ async def enviar_a_packet_tracer(data: dict):
 
 
 # ============================================================
+@app.get("/api/catalogo_plantas")
+async def get_catalogo_plantas():
+    """Devuelve el catalogo completo de plantas desde Supabase (cache 5 min en cliente)."""
+    try:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/catalogo_plantas",
+            params={"order": "nombre.asc", "limit": "200"},
+            headers=HEADERS_SERVICE,
+        )
+        if resp.status_code == 200:
+            return {"ok": True, "plantas": resp.json(), "count": len(resp.json())}
+        return {"ok": False, "error": f"Supabase {resp.status_code}", "plantas": []}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "plantas": []}
+
+
 # WEBSOCKET - REALTIME DESDE SUPABASE
 # ============================================================
 

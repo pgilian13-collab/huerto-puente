@@ -111,6 +111,17 @@ var ConfigModule = (function() {
                 AppState.set('umbrales', rows[0].umbrales);
                 AppState.persistUmbrales();
                 console.log('[CONFIG] Umbrales cargados desde Supabase');
+                // Cargar planta asociada si existe
+                var plantaId = rows[0].planta_id;
+                if (plantaId && allPlants && allPlants.length > 0) {
+                    var plant = allPlants.find(function(p) { return p.id === plantaId; });
+                    if (plant) {
+                        AppState.set('currentPlanta', plant);
+                        var pk = getPlantaKey();
+                        try { localStorage.setItem(pk, JSON.stringify(plant)); } catch (e) {}
+                        console.log('[CONFIG] Planta cargada desde Supabase: ' + plant.nombre);
+                    }
+                }
             }
         }).catch(function(e) {
             console.error('[CONFIG] Error cargando umbrales:', e);
@@ -202,15 +213,26 @@ var ConfigModule = (function() {
 
         var inv = AppState.get('currentInv') || 0;
         var deviceId = inv + 1;
-        var payload = { dispositivo_id: deviceId, umbrales: umbrales, updated_at: new Date().toISOString() };
+        var plantaActual = AppState.get('currentPlanta');
+        var plantaId = plantaActual ? plantaActual.id : null;
+        var payload = {
+            dispositivo_id: deviceId,
+            umbrales: umbrales,
+            planta_id: plantaId,
+            updated_at: new Date().toISOString()
+        };
         ApiService.sbQuery('configuracion', 'dispositivo_id=eq.' + deviceId).then(function(existing) {
             if (existing && existing.length > 0) {
                 return ApiService.sbPatch('configuracion', existing[0].id, payload);
             } else {
-                return ApiService.sbInsert('configuracion', { dispositivo_id: deviceId, umbrales: umbrales });
+                return ApiService.sbInsert('configuracion', {
+                    dispositivo_id: deviceId,
+                    umbrales: umbrales,
+                    planta_id: plantaId
+                });
             }
         }).then(function() {
-            console.log('[CONFIG] Umbrales guardados en Supabase');
+            console.log('[CONFIG] Umbrales + planta_id=' + plantaId + ' guardados en Supabase');
         }).catch(function(e) {
             console.error('[CONFIG] Error guardando en Supabase:', e);
         });
@@ -326,6 +348,8 @@ var ConfigModule = (function() {
             badge.style.display = 'inline-flex';
         }
 
+        // Guardar en AppState y localStorage
+        AppState.set('currentPlanta', plant);
         var pk = getPlantaKey();
         try { localStorage.setItem(pk, JSON.stringify(plant)); } catch (e) {}
 
@@ -333,7 +357,6 @@ var ConfigModule = (function() {
             App.showToast('Umbrales de "' + plant.nombre + '" aplicados - click Guardar', 'success');
         }
 
-        // Emitir evento para que dashboard tambn se entere
         try { EventBus.emit('plant:selected', plant); } catch (e) {}
     }
 
