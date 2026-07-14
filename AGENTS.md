@@ -119,19 +119,19 @@ Frontend (config.js o dashboard.js):
 - No necesita keys, es simulador local
 - WiFi: "Wokwi-GUEST" sin password
 - DNS externo resuelto via proxy de Wokwi
-- **Mismo diagram.json** para los 5 invernaderos (MODULE_ID 1-5) — misma configuración de sensores
-- **Valores default por chip en diagram.json:**
+- **5 diagram.json separados** por invernadero (`diagram-inv1.json` a `diagram-inv5.json`)
+- `diagram.json` (raíz) es una copia de INV-01, sirve como default
+- **Valores default por chip/invernadero:**
 
-| Chip | MUX | Maceta | Tipo | Attrs Wokwi | Raw ADC | Fórmula leer_suelo() | % Humedad |
-|------|-----|--------|------|-------------|---------|----------------------|-----------|
-| chip1 | C0 | MAC-1 | hum_suelo | moisture=2200 | ~2200 | (2200-1000)/2500*100 | ~48% |
-| chip2 | C2 | MAC-2 | hum_suelo | moisture=2900 | ~2900 | (2900-1000)/2500*100 | ~76% |
-| chip3 | C4 | MAC-3 | hum_suelo | moisture=3400 | ~3400 | (3400-1000)/2500*100 | ~96% |
-| chip4 | C6 | MAC-4 | hum_suelo | moisture=2600 | ~2600 | (2600-1000)/2500*100 | ~64% |
-| ph1 | C1 | MAC-1 | ph | ph="7.0" | — | — | 7.0 |
-| ph2 | C3 | MAC-2 | ph | ph="6.5" | — | — | 6.5 |
-| ph3 | C5 | MAC-3 | ph | ph="6.8" | — | — | 6.8 |
-| ph4 | C7 | MAC-4 | ph | ph="7.2" | — | — | 7.2 |
+| Invernadero | chip1 (MAC-1) | chip2 (MAC-2) | chip3 (MAC-3) | chip4 (MAC-4) | ph1 | ph2 | ph3 | ph4 |
+|-------------|---------------|---------------|---------------|---------------|-----|-----|-----|-----|
+| INV-01 | 2200 (~48%) | 2900 (~76%) | 3400 (~96%) | 2600 (~64%) | 7.0 | 6.5 | 6.8 | 7.2 |
+| INV-02 | 1800 (~32%) | 3100 (~84%) | 2400 (~56%) | 3300 (~92%) | 6.2 | 7.1 | 5.8 | 6.9 |
+| INV-03 | 3200 (~88%) | 2000 (~40%) | 2800 (~72%) | 3500 (~100%) | 7.4 | 6.0 | 7.2 | 6.3 |
+| INV-04 | 2500 (~60%) | 3500 (~100%) | 1900 (~36%) | 3000 (~80%) | 6.7 | 7.3 | 6.1 | 7.0 |
+| INV-05 | 3000 (~80%) | 2200 (~48%) | 3100 (~84%) | 1800 (~32%) | 5.9 | 6.8 | 7.5 | 6.4 |
+
+**Fórmula conversión:** `% = (raw - 1000) / (3500 - 1000) * 100`
 
 ### Render
 - Variables de entorno en dashboard de Render:
