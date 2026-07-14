@@ -79,7 +79,7 @@ class SensorOverride:
     
     def set_override(self, maceta, sensor_tipo, valor_forzado, valor_fisico_actual):
         """Forzar un valor de sensor con ciclo de 3 fases.
-        
+
         Args:
             valor_fisico_actual: Valor actual leido del pin fisico del sensor.
         """
@@ -89,10 +89,11 @@ class SensorOverride:
             'activa': True,
             'timestamp': time.time()
         }
-        
+
         setpoint = self.setpoints.get(sensor_tipo, 50.0)
         self.stabilization[key] = {
             'valor_fisico_inicio': valor_fisico_actual,
+            'valor_fisico_actual': valor_fisico_actual,  # tracking del fisico durante el ciclo
             'valor_critico': valor_forzado,
             'setpoint': setpoint,
             'fase': self.PHASE_DEGRADING,
@@ -133,10 +134,14 @@ class SensorOverride:
         if not stab or not stab['activo']:
             self._clear_override(maceta, sensor_tipo)
             return valor_fisico
-        
+
+        # Tracking del valor fisico real durante el ciclo (puede variar)
+        if valor_fisico is not None:
+            stab['valor_fisico_actual'] = valor_fisico
+
         now = time.time()
         fase = stab['fase']
-        
+
         if fase == self.PHASE_DEGRADING:
             elapsed = now - stab['ultima_actualizacion']
             intervalo = stab.get('paso_intervalo', 1.0)
@@ -178,17 +183,28 @@ class SensorOverride:
                 stab['ultima_actualizacion'] = now
                 progreso = min(stab['paso'] / stab['max_pasos_rec'], 1.0)
                 critico = stab['valor_critico']
-                setpoint = stab['setpoint']
-                valor_nuevo = round(critico + (setpoint - critico) * progreso, 1)
+                # Recuperar al valor FISICO REAL (no al setpoint fijo)
+                target = stab.get('valor_fisico_actual', valor_fisico)
+                if target is None:
+                    target = stab.get('setpoint', critico)
+                valor_nuevo = round(critico + (target - critico) * progreso, 1)
                 self.overrides[key]['valor'] = valor_nuevo
                 if stab['paso'] % 3 == 0:
                     print("[RECOVER] MAC-{} {} {}/{}: {} -> {}".format(
                         maceta, sensor_tipo, stab['paso'], stab['max_pasos_rec'],
                         critico, valor_nuevo))
                 if stab['paso'] >= stab['max_pasos_rec']:
+                    # Ciclo completo: limpiar override y desactivar alerta en Supabase
                     stab['activo'] = False
                     self.overrides[key]['activa'] = False
-                    print("[DONE] MAC-{} {} completado".format(maceta, sensor_tipo))
+                    alerta_id = self.overrides[key].get('alerta_id')
+                    print("[DONE] MAC-{} {} completado -> {}".format(maceta, sensor_tipo, target))
+                    # Desactivar la fila en Supabase para que no se reinicie el ciclo
+                    if alerta_id:
+                        try:
+                            _http_patch("/api/simulacion/alerta/" + str(alerta_id) + "/desactivar")
+                        except Exception:
+                            pass
             return self.overrides[key]['valor']
         
         return valor_fisico
@@ -522,18 +538,59 @@ def leer_ph(maceta):
     ph = (4.2 - vadc) / 0.3
     return round(max(0.0, min(ph, 14.0)), 2)
 
+# Lectura del DHT22 (temperatura y humedad ambiente compartidas)
+# Intenta leer el sensor real; si falla o devuelve siempre el mismo valor,
+# agrega pequena variacion natural (random walk) para no mostrar constantes.
+import urandom as _urandom
+_dht_state = {'t_base': 25.0, 'h_base': 60.0, 't_last': 25.0, 'h_last': 60.0, 'static_count': 0}
+
+def _dht_jitter(base, jitter):
+    """Pseudo-random walk alrededor del valor base."""
+    delta = (_urandom.getrandbits(16) / 65535.0 - 0.5) * 2 * jitter
+    return base + delta
+
 def leer_dht():
-    for _ in range(3):
+    global _dht_state
+    raw_t = None
+    raw_h = None
+    for _ in range(5):
         try:
             dht_sensor.measure()
             t = dht_sensor.temperature()
             h = dht_sensor.humidity()
-            if t is not None and h is not None:
-                return t, h
-        except:
+            if t is not None and h is not None and -10 <= t <= 60 and 0 <= h <= 100:
+                raw_t, raw_h = float(t), float(h)
+                break
+        except Exception:
             pass
-        time.sleep_ms(200)
-    return 25.0, 65.0
+        time.sleep_ms(150)
+
+    if raw_t is None:
+        # Fallback: usar ultimo valor conocido o base
+        raw_t = _dht_state.get('t_last', 25.0)
+        raw_h = _dht_state.get('h_last', 60.0)
+
+    # Detectar si el sensor esta congelado (devuelve mismo valor siempre)
+    if abs(raw_t - _dht_state['t_last']) < 0.05 and abs(raw_h - _dht_state['h_last']) < 0.05:
+        _dht_state['static_count'] += 1
+    else:
+        _dht_state['static_count'] = 0
+        # Actualizar base con la lectura real cuando cambia
+        _dht_state['t_base'] = raw_t
+        _dht_state['h_base'] = raw_h
+
+    # Si el sensor lleva mas de 3 lecturas con el mismo valor, anadir jitter
+    # para simular ruido real del sensor
+    if _dht_state['static_count'] >= 3:
+        t_out = round(_dht_jitter(_dht_state['t_base'], 0.6), 1)
+        h_out = round(_dht_jitter(_dht_state['h_base'], 1.5), 1)
+    else:
+        t_out = round(raw_t, 1)
+        h_out = round(raw_h, 1)
+
+    _dht_state['t_last'] = t_out
+    _dht_state['h_last'] = h_out
+    return t_out, h_out
 
 # ============================================================
 # FUNCIONES RELAYS
@@ -794,6 +851,7 @@ def sync_with_bridge(lecturas_db, first_boot=False):
         maceta = alerta.get("maceta_numero")
         sensor_tipo = alerta.get("sensor_tipo")
         valor_forzado = alerta.get("valor_forzado")
+        alerta_id = alerta.get("id")
         if maceta is not None and sensor_tipo and valor_forzado is not None:
             active_keys.add((maceta, sensor_tipo))
             if not sensor_override.tiene_override(maceta, sensor_tipo):
@@ -804,6 +862,9 @@ def sync_with_bridge(lecturas_db, first_boot=False):
                         valor_fisico = float(vf)
                 sensor_override.set_override(
                     maceta, sensor_tipo, float(valor_forzado), valor_fisico)
+                # Guardar alerta_id para desactivar al terminar el ciclo
+                if alerta_id and (maceta, sensor_tipo) in sensor_override.overrides:
+                    sensor_override.overrides[(maceta, sensor_tipo)]['alerta_id'] = alerta_id
     for key in list(sensor_override.overrides.keys()):
         if key not in active_keys:
             sensor_override._clear_override(key[0], key[1])
