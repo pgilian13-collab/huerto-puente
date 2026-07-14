@@ -28,6 +28,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Directorio del frontend (unificado, sin duplicar en static/)
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend")
+
 # ============================================================
 # CONFIGURACION
 # ============================================================
@@ -789,17 +792,17 @@ async def websocket_realtime(websocket: WebSocket):
 
 @app.get("/")
 async def root():
-    return FileResponse("static/index.html")
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
 @app.get("/index.html")
 async def index_html():
-    return FileResponse("static/index.html")
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
 @app.get("/login")
 async def login_page():
-    return FileResponse("static/login.html")
+    return FileResponse(os.path.join(FRONTEND_DIR, "login.html"))
 
 @app.get("/ping")
 async def ping():
@@ -985,6 +988,6 @@ async def get_challenge_ranking(limit: int = 10):
         return {"ranking": []}
 
 # Archivos estaticos del frontend (al final para no capturar API routes)
-app.mount("/css", StaticFiles(directory="static/css"), name="css")
-app.mount("/js", StaticFiles(directory="static/js"), name="js")
-app.mount("/src", StaticFiles(directory="static/src"), name="src")
+app.mount("/css", StaticFiles(directory=os.path.join(FRONTEND_DIR, "css")), name="css")
+app.mount("/js", StaticFiles(directory=os.path.join(FRONTEND_DIR, "js")), name="js")
+app.mount("/src", StaticFiles(directory=os.path.join(FRONTEND_DIR, "src")), name="src")
