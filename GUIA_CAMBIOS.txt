@@ -1,0 +1,268 @@
+================================================================================
+  GUIA COMPLETA DE CAMBIOS - HUERTO INTELIGENTE UNHEVAL
+  Todos los cambios realizados hasta el 09/07/2026
+================================================================================
+
+
+CONTENIDO
+---------
+  1. Tabla a crear en Supabase: catalogo_plantas
+  2. Archivos nuevos del proyecto
+  3. Archivos modificados - Cambios en cada archivo
+  4. Dependencias Python
+  5. Como ejecutar el proyecto
+
+
+================================================================================
+1. TABLA A CREAR EN SUPABASE: catalogo_plantas
+================================================================================
+
+Ejecutar este SQL en el SQL Editor de Supabase:
+
+--------------------------------------------------
+CREATE TABLE IF NOT EXISTS catalogo_plantas (
+    id                SERIAL PRIMARY KEY,
+    nombre            VARCHAR(50) NOT NULL UNIQUE,
+    temp_min          DECIMAL(4,1),
+    temp_max          DECIMAL(4,1),
+    hum_suelo_min     DECIMAL(4,1),
+    hum_suelo_max     DECIMAL(4,1),
+    hum_ambiente_min  DECIMAL(4,1),
+    hum_ambiente_max  DECIMAL(4,1),
+    ph_min            DECIMAL(3,1),
+    ph_max            DECIMAL(3,1),
+    created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Permisos para que el frontend pueda leer (anon key)
+ALTER TABLE catalogo_plantas ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read" ON catalogo_plantas
+    FOR SELECT USING (true);
+
+-- Permisos para service_role (escritura)
+GRANT SELECT, INSERT ON catalogo_plantas TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE catalogo_plantas_id_seq TO service_role;
+--------------------------------------------------
+
+Despues de crear la tabla, ejecutar en el SQL Editor:
+  SELECT pg_notify('pgrst', 'reload schema');
+
+Luego importar las 71 plantas con:
+  py -3.12 importar_catalogo.py
+
+(El archivo Excel debe estar en C:\Users\<usuario>\Downloads\
+
+
+================================================================================
+2. ARCHIVOS NUEVOS DEL PROYECTO
+================================================================================
+
+create_catalogo_plantas.sql
+  Script SQL para crear la tabla catalogo_plantas (ver seccion 1).
+
+importar_catalogo.py
+  Script Python que lee el Excel y inserta las 71 plantas en Supabase.
+  Ejecutar: py -3.12 importar_catalogo.py
+  IMPORTANTE: Actualizar las credenciales SUPABASE_URL y SUPABASE_SERVICE_KEY
+  al inicio del archivo antes de ejecutar.
+
+
+================================================================================
+3. ARCHIVOS MODIFICADOS - CAMBIOS EN CADA ARCHIVO
+================================================================================
+
+------------------------------------------------------------------------
+frontend/index.html
+------------------------------------------------------------------------
+
+a) Logo UNHEVAL corregido:
+   - URL cambiada de wp-content a portal/public
+   - Linea del logo UNHEVAL:
+     src="https://www.unheval.edu.pe/portal/public/imagenes/unh/logounh-324x84-1-300x78.png"
+
+b) Eliminada fuente Inter de Google Fonts:
+   - Se elimino el <link> de Inter (solo se usa JetBrains Mono)
+
+c) Agregado canvas de particulas en el fondo:
+   - Dentro de .stars-container, se agrego:
+     <canvas id="particleCanvas"></canvas>
+
+d) Selector de plantas en modal de configuracion:
+   - Seccion "plant-selector-section" con:
+     - Input de busqueda con icono lupa
+     - Dropdown dinamico con plantas filtradas
+     - Badge de planta seleccionada con boton X
+
+e) Seccion de recomendaciones en modal:
+   - Div "plant-recommendations" con id="plantRecommendations"
+   - Lista "plant-recList" para mostrar recomendaciones
+   - Se oculta por defecto (display:none)
+
+f) Botones de refresh en historico:
+   - Boton con id="btnRefreshHistorico" para refresco manual
+   - Label con id="autoRefreshLabel" mostrando "Auto 10s"
+
+g) Modal header con titulo dinamico:
+   - h3 con id="configModalTitle" para mostrar INV/MAC actual
+
+------------------------------------------------------------------------
+frontend/js/app.js
+------------------------------------------------------------------------
+
+a) CATALOGO_PLANTAS - Array con 71 plantas:
+   - Array embebido con todas las plantas del Excel
+   - Cada planta tiene: id, nombre, temp_min/max, hum_suelo_min/max,
+     hum_ambiente_min/max, ph_min/max
+   - Funciona como fallback si Supabase no responde
+
+b) Selector de plantas:
+   - initPlantSelector(): inicializa eventos del buscador
+   - renderPlantDropdown(query): filtra plantas por nombre (normaliza tildes)
+   - seleccionarPlanta(id): rellena inputs con valores de la planta
+   - cargarCatalogoPlantas(): carga desde Supabase con fallback al array
+
+c) Configuracion por maceta (ya NO es global):
+   - getConfigKey(): retorna "huerto_config_inv{N}_mac{M}"
+   - getPlantaKey(): retorna "huerto_planta_inv{N}_mac{M}"
+   - loadConfigForCurrentMaceta(): carga config de la maceta actual
+   - Cada maceta tiene sus propios umbrales y planta en localStorage
+
+d) Skeleton loading:
+   - setSkeletonActive(true/false): activa/desactiva shimmer en cards
+   - Se activa al cambiar de invernadero y al cargar datos iniciales
+
+e) Tooltip en cards:
+   - initTooltips(): crea tooltips con rango normal y valor actual
+   - getThreshold(key, fallback): lee umbrales de la maceta actual
+   - Colores: verde=normal, naranja=cerca del limite, rojo=fuera de rango
+
+f) Transicion entre tabs:
+   - selectInvernadero() tiene animacion fade-out/fade-in (250ms)
+   - Clase .tab-exit en .main-content
+
+g) Recomendaciones de plantas:
+   - showRecommendations(): escanea macetas del invernadero
+   - Busca plantas con rango de temperatura similar (overlap > 30%)
+   - Muestra top 5 con % de compatibilidad
+   - Click en recomendacion la selecciona directamente
+
+h) selectInvernadero() y selectMaceta():
+   - selectInvernadero: carga config de MAC-01, skeleton, transicion
+   - selectMaceta: carga config, recomendaciones, datos, historico
+
+i) Chart:
+   - Font del legend cambiado de 'Inter' a 'JetBrains Mono'
+
+j) Sensor cards:
+   - Eliminado card.style.cursor = 'pointer' (ahora en CSS)
+
+------------------------------------------------------------------------
+frontend/css/styles.css
+------------------------------------------------------------------------
+
+a) Variables CSS agregadas en :root:
+   --bg-panel: #111
+   --font-mono: 'JetBrains Mono', monospace
+
+b) Skeleton loading:
+   - Clase .skeleton con animacion shimmer
+   - @keyframes skeletonShimmer
+
+c) Tooltip en cards:
+   - .sensor-tooltip (estilo brutalist, posicion arriba de la card)
+   - .sensor-tooltip-row, .sensor-tooltip-label, .sensor-tooltip-val
+   - Colores .warn (naranja) y .crit (rojo)
+
+d) Transicion tabs:
+   - .main-content con transition de opacity y transform
+   - .tab-exit para fade-out
+
+e) Particulas:
+   - #particleCanvas posicion absolute dentro de stars-container
+
+f) Recomendaciones:
+   - .plant-recommendations, .plant-rec-header, .plant-rec-list
+   - .plant-rec-item con hover
+   - .plant-rec-match.high (verde) y .plant-rec-match.med (naranja)
+
+g) Modal:
+   - @keyframes scanLine para barra superior animada
+   - @keyframes modalIn para animacion de entrada
+   - .modal-overlay.active .modal-box con animacion
+
+h) Sensor cards:
+   - cursor: pointer en .sensor-card
+   - .sensor-card:active para feedback al click
+
+i) Responsive:
+   - .alert-buttons: 5-col -> 3-col (640px) -> 2-col (400px)
+   - .modal-box: max-width 100% en movil
+   - .panel-header h3: flex:1 para no empujar botones
+
+j) CSS muerto eliminado (~347 lineas):
+   - .section-title (nunca usado en HTML)
+   - Corner brackets, scan line, rivets de .sensor-card
+   - .card-icon.ph duplicado
+   - .bottom-grid (nunca usado)
+   - .macetas-grid completo (~170 lineas legacy)
+   - Bloque .header duplicado (~115 lineas)
+   - Referencias responsive a .macetas-grid y .bottom-grid
+
+------------------------------------------------------------------------
+puente_supabase/main.py
+------------------------------------------------------------------------
+
+a) Frontend unificado:
+   - FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+   - Static files ahora sirven desde ../frontend/ en vez de static/
+   - Linea final del archivo:
+     app.mount("/css", StaticFiles(directory=os.path.join(FRONTEND_DIR, "css")))
+     app.mount("/js", StaticFiles(directory=os.path.join(FRONTEND_DIR, "js")))
+   - Root route: FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+b) Directorio puente_supabase/static/ ELIMINADO:
+   - Era duplicado exacto de frontend/
+   - Ahora existe UN solo juego de archivos frontend en /frontend/
+
+
+================================================================================
+4. DEPENDENCIAS PYTHON
+================================================================================
+
+Instalar con:
+  py -3.12 -m pip install fastapi uvicorn httpx websockets python-dotenv psycopg2-binary openpyxl
+
+
+================================================================================
+5. COMO EJECUTAR EL PROYECTO
+================================================================================
+
+1. Crear la tabla en Supabase (seccion 1)
+2. Importar plantas: py -3.12 importar_catalogo.py
+3. Iniciar el servidor:
+   cd puente_supabase
+   py -3.12 -m uvicorn main:app --reload --port 8000
+4. Abrir en navegador: http://localhost:8000
+
+
+================================================================================
+ESTRUCTURA FINAL DE ARCHIVOS
+================================================================================
+
+huerto-puente-main/
+  frontend/
+    index.html
+    css/
+      styles.css
+    js/
+      config.js              <-- Supabase credentials
+      supabase-client.js     <-- REST + Realtime client
+      app.js                 <-- Logica principal
+  puente_supabase/
+    main.py                  <-- FastAPI server
+    requirements.txt
+  create_catalogo_plantas.sql
+  importar_catalogo.py
+  schema.sql
+  GUIA_CAMBIOS.txt           <-- Este archivo
