@@ -432,7 +432,243 @@ var ConfigModule = (function() {
         }
     }
 
-    return { init: init, destroy: destroy, cargarCatalogoPlantas: cargarCatalogoPlantas, showRecommendations: showRecommendations, seleccionarPlanta: seleccionarPlanta };
+    // ============================================================
+    // MODAL: AGREGAR PLANTA
+    // ============================================================
+
+    function openAddPlantModal() {
+        var modal = document.getElementById('addPlantModal');
+        if (!modal) return;
+        var err = document.getElementById('addPlantError');
+        if (err) { err.style.display = 'none'; err.textContent = ''; }
+        ['np-nombre','np-temp-min','np-temp-max','np-hs-min','np-hs-max','np-ha-min','np-ha-max','np-ph-min','np-ph-max'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        modal.classList.add('active');
+    }
+
+    function closeAddPlantModal() {
+        var modal = document.getElementById('addPlantModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    function getFloat(id, fallback) {
+        var el = document.getElementById(id);
+        if (!el) return fallback;
+        var v = parseFloat(el.value);
+        return isNaN(v) ? fallback : v;
+    }
+
+    function submitNewPlant() {
+        var err = document.getElementById('addPlantError');
+        var nombre = (document.getElementById('np-nombre').value || '').trim();
+        if (!nombre) {
+            err.textContent = 'El nombre es obligatorio';
+            err.style.display = 'block';
+            return;
+        }
+        var payload = {
+            nombre: nombre,
+            temp_min: getFloat('np-temp-min', null),
+            temp_max: getFloat('np-temp-max', null),
+            hum_suelo_min: getFloat('np-hs-min', null),
+            hum_suelo_max: getFloat('np-hs-max', null),
+            hum_ambiente_min: getFloat('np-ha-min', null),
+            hum_ambiente_max: getFloat('np-ha-max', null),
+            ph_min: getFloat('np-ph-min', null),
+            ph_max: getFloat('np-ph-max', null)
+        };
+        var btn = document.getElementById('btnSaveNewPlant');
+        if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+        ApiService.sbInsert('catalogo_plantas', payload).then(function() {
+            allPlants.push(Object.assign({id: Date.now()}, payload));
+            closeAddPlantModal();
+            if (window.App && typeof App.showToast === 'function') {
+                App.showToast('Planta "' + nombre + '" agregada al catalogo', 'success');
+            }
+        }).catch(function(e) {
+            err.textContent = 'Error al guardar: ' + (e && e.message ? e.message : e);
+            err.style.display = 'block';
+        }).then(function() {
+            if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+        });
+    }
+
+    function initAddPlantModal() {
+        var btnAdd = document.getElementById('btnAddPlant');
+        var btnSave = document.getElementById('btnSaveNewPlant');
+        var btnCancel = document.getElementById('btnCancelAddPlant');
+        var btnClose = document.getElementById('addPlantModalClose');
+        var modal = document.getElementById('addPlantModal');
+        if (btnAdd) btnAdd.addEventListener('click', openAddPlantModal);
+        if (btnSave) btnSave.addEventListener('click', submitNewPlant);
+        if (btnCancel) btnCancel.addEventListener('click', closeAddPlantModal);
+        if (btnClose) btnClose.addEventListener('click', closeAddPlantModal);
+        if (modal) modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeAddPlantModal();
+        });
+    }
+
+    // ============================================================
+    // MODAL: RECOMENDACIONES
+    // ============================================================
+
+    function openRecommendationsModal() {
+        var modal = document.getElementById('recPlantModal');
+        var list = document.getElementById('recPlantList');
+        var info = document.getElementById('recInfo');
+        if (!modal || !list || !info) return;
+
+        var inv = AppState.get('currentInv') || 0;
+        var currentMac = AppState.get('currentMaceta') || 1;
+
+        var otherMacetas = [];
+        for (var m = 1; m <= 4; m++) {
+            if (m === currentMac) continue;
+            try {
+                var key = 'huerto_config_inv' + (inv + 1) + '_mac' + m;
+                var saved = JSON.parse(localStorage.getItem(key) || 'null');
+                if (!saved) continue;
+                var tk = 'huerto_planta_inv' + (inv + 1) + '_mac' + m;
+                var plantaSaved = JSON.parse(localStorage.getItem(tk) || 'null');
+                if (plantaSaved && plantaSaved.id) {
+                    var planta = allPlants.find(function(p) { return p.id === plantaSaved.id; });
+                    if (planta) {
+                        var tMin = (saved.temp_min !== undefined) ? saved.temp_min : planta.temp_min;
+                        var tMax = (saved.temp_max !== undefined) ? saved.temp_max : planta.temp_max;
+                        var haMin = (saved.humAmb && saved.humAmb.min !== undefined) ? saved.humAmb.min : planta.hum_ambiente_min;
+                        var haMax = (saved.humAmb && saved.humAmb.max !== undefined) ? saved.humAmb.max : planta.hum_ambiente_max;
+                        otherMacetas.push({
+                            maceta: m, planta: planta,
+                            temp_min: tMin, temp_max: tMax,
+                            ha_min: haMin, ha_max: haMax
+                        });
+                    }
+                }
+            } catch (e) {}
+        }
+
+        if (otherMacetas.length === 0) {
+            info.innerHTML = '<div class="rec-empty">Configura al menos otra maceta del invernadero para ver recomendaciones de plantas compatibles.</div>';
+            list.innerHTML = '';
+            modal.classList.add('active');
+            return;
+        }
+
+        var avgTempMin = 0, avgTempMax = 0, avgHaMin = 0, avgHaMax = 0;
+        for (var i = 0; i < otherMacetas.length; i++) {
+            avgTempMin += otherMacetas[i].temp_min;
+            avgTempMax += otherMacetas[i].temp_max;
+            avgHaMin += otherMacetas[i].ha_min;
+            avgHaMax += otherMacetas[i].ha_max;
+        }
+        avgTempMin /= otherMacetas.length;
+        avgTempMax /= otherMacetas.length;
+        avgHaMin /= otherMacetas.length;
+        avgHaMax /= otherMacetas.length;
+
+        var usedIds = {};
+        otherMacetas.forEach(function(o) { usedIds[o.planta.id] = true; });
+
+        var scored = allPlants
+            .filter(function(p) { return !usedIds[p.id]; })
+            .map(function(p) {
+                var tOverlapMin = Math.max(p.temp_min || 0, avgTempMin);
+                var tOverlapMax = Math.min(p.temp_max || 50, avgTempMax);
+                var tOverlap = Math.max(0, tOverlapMax - tOverlapMin);
+                var tRange = Math.max((p.temp_max || 0) - (p.temp_min || 0), 1);
+                var tScore = tOverlap / tRange;
+
+                var haOverlapMin = Math.max(p.hum_ambiente_min || 0, avgHaMin);
+                var haOverlapMax = Math.min(p.hum_ambiente_max || 100, avgHaMax);
+                var haOverlap = Math.max(0, haOverlapMax - haOverlapMin);
+                var haRange = Math.max((p.hum_ambiente_max || 0) - (p.hum_ambiente_min || 0), 1);
+                var haScore = haOverlap / haRange;
+
+                var score = (tScore + haScore) / 2;
+                return { p: p, score: score };
+            })
+            .filter(function(x) { return x.score > 0.3; })
+            .sort(function(a, b) { return b.score - a.score; })
+            .slice(0, 10);
+
+        if (scored.length === 0) {
+            info.innerHTML = '<div class="rec-empty">No se encontraron plantas con requisitos similares en el catalogo.</div>';
+            list.innerHTML = '';
+        } else {
+            var othersInfo = otherMacetas.map(function(m) {
+                return 'MAC-' + (m.maceta < 10 ? '0' + m.maceta : m.maceta) + ': ' + m.planta.nombre +
+                    ' (' + m.temp_min + '-' + m.temp_max + '\u00b0C, ' + m.ha_min + '-' + m.ha_max + '% hum)';
+            }).join(' | ');
+            info.innerHTML = '<div class="rec-others"><strong>Ya configuradas:</strong> ' + othersInfo + '</div>';
+            var html = '';
+            for (var k = 0; k < scored.length; k++) {
+                var x = scored[k];
+                var pct = Math.round(x.score * 100);
+                var cls = pct >= 80 ? 'high' : (pct >= 50 ? 'med' : 'low');
+                html += '<div class="plant-rec-item" data-plant-id="' + x.p.id + '">' +
+                    '<span class="material-icons-round">eco</span>' +
+                    '<div class="plant-rec-info">' +
+                        '<span class="plant-rec-name">' + x.p.nombre + '</span>' +
+                        '<span class="plant-rec-ranges">' +
+                            'T:' + x.p.temp_min + '-' + x.p.temp_max + '\u00b0C | ' +
+                            'HA:' + x.p.hum_ambiente_min + '-' + x.p.hum_ambiente_max + '%' +
+                        '</span>' +
+                    '</div>' +
+                    '<span class="plant-rec-match ' + cls + '">' + pct + '%</span>' +
+                '</div>';
+            }
+            list.innerHTML = html;
+            var items = list.querySelectorAll('.plant-rec-item');
+            for (var j = 0; j < items.length; j++) {
+                (function(item) {
+                    item.addEventListener('click', function() {
+                        var pid = parseInt(item.getAttribute('data-plant-id'));
+                        seleccionarPlanta(pid);
+                        modal.classList.remove('active');
+                    });
+                })(items[j]);
+            }
+        }
+        modal.classList.add('active');
+    }
+
+    function closeRecommendationsModal() {
+        var modal = document.getElementById('recPlantModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    function initRecommendationsModal() {
+        var btn = document.getElementById('btnShowRecommendations');
+        var btnClose = document.getElementById('recPlantModalClose');
+        var modal = document.getElementById('recPlantModal');
+        if (btn) btn.addEventListener('click', openRecommendationsModal);
+        if (btnClose) btnClose.addEventListener('click', closeRecommendationsModal);
+        if (modal) modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeRecommendationsModal();
+        });
+    }
+
+    // ============================================================
+    // INIT HOOK - registra listeners de los nuevos botones
+    // ============================================================
+
+    var _origInit = init;
+    init = function() {
+        _origInit();
+        initAddPlantModal();
+        initRecommendationsModal();
+    };
+
+    return {
+        init: init, destroy: destroy,
+        cargarCatalogoPlantas: cargarCatalogoPlantas,
+        showRecommendations: showRecommendations,
+        seleccionarPlanta: seleccionarPlanta,
+        openAddPlantModal: openAddPlantModal,
+        openRecommendationsModal: openRecommendationsModal
+    };
 })();
 
 if (typeof window !== 'undefined') window.ConfigModule = ConfigModule;
