@@ -119,6 +119,19 @@ Frontend (config.js o dashboard.js):
 - No necesita keys, es simulador local
 - WiFi: "Wokwi-GUEST" sin password
 - DNS externo resuelto via proxy de Wokwi
+- **Mismo diagram.json** para los 5 invernaderos (MODULE_ID 1-5) — misma configuración de sensores
+- **Valores default por chip en diagram.json:**
+
+| Chip | MUX | Maceta | Tipo | Attrs Wokwi | Raw ADC | Fórmula leer_suelo() | % Humedad |
+|------|-----|--------|------|-------------|---------|----------------------|-----------|
+| chip1 | C0 | MAC-1 | hum_suelo | moisture=2200 | ~2200 | (2200-1000)/2500*100 | ~48% |
+| chip2 | C2 | MAC-2 | hum_suelo | moisture=2900 | ~2900 | (2900-1000)/2500*100 | ~76% |
+| chip3 | C4 | MAC-3 | hum_suelo | moisture=3400 | ~3400 | (3400-1000)/2500*100 | ~96% |
+| chip4 | C6 | MAC-4 | hum_suelo | moisture=2600 | ~2600 | (2600-1000)/2500*100 | ~64% |
+| ph1 | C1 | MAC-1 | ph | ph="7.0" | — | — | 7.0 |
+| ph2 | C3 | MAC-2 | ph | ph="6.5" | — | — | 6.5 |
+| ph3 | C5 | MAC-3 | ph | ph="6.8" | — | — | 6.8 |
+| ph4 | C7 | MAC-4 | ph | ph="7.2" | — | — | 7.2 |
 
 ### Render
 - Variables de entorno en dashboard de Render:
@@ -320,3 +333,4 @@ frontend/
 7. **MicroPython no tiene str.zfill()** — usar concatenacion manual
 8. **PCF8574 no esta en Wokwi** — solo funciona en hardware real
 9. **`leer_suelo()`/`leer_ph()` retornan None** si pin flotante (raw <200 o >3800)
+10. **Override reset en boot** — primer `/api/sync` envía `reset_overrides=True` para desactivar overrides viejos de `simulacion_alertas`; ESP32 descarta overrides heredados del primer response

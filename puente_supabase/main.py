@@ -149,9 +149,22 @@ async def sync_device(data: dict):
     device_id = data.get("device", data.get("dispositivo_id", 1))
     sensors = data.get("sensors", {})
     pending = data.get("pending", False)
+    reset_overrides = data.get("reset_overrides", False)
 
     sensors_ok = 0
     sensors_failed = 0
+
+    # 0) If first boot, deactivate any stale overrides from previous sessions
+    if reset_overrides and pending:
+        try:
+            await client.patch(
+                f"{SUPABASE_URL}/rest/v1/simulacion_alertas?dispositivo_id=eq.{device_id}&activa=eq.true",
+                json={"activa": False},
+                headers={**HEADERS_SERVICE, "Prefer": "return=minimal"},
+            )
+            print(f"[SYNC] Reset overrides: deactivated stale alerts for device {device_id}")
+        except Exception as e:
+            print(f"[SYNC] Reset overrides error: {e}")
 
     # 1) Batch insert into monitoreo_lecturas (table that frontend reads from)
     if sensors:

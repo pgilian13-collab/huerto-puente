@@ -673,17 +673,23 @@ def _http_patch(path, timeout=8):
         gc.collect()
         return 0
 
-def sync_with_bridge(lecturas_db):
+def sync_with_bridge(lecturas_db, first_boot=False):
     """Piggyback: send sensors AND receive commands + overrides in ONE HTTP call.
     Sends ALL 10 sensors every call (no delta filter) to ensure complete data.
+    If first_boot=True, sends reset_overrides=True to invalidate stale overrides
+    from previous sessions, and discards any overrides returned in the response.
     """
-    global wifi_fail_count
+    global wifi_fail_count, first_sync_done
 
     payload = {"device": MODULE_ID, "pending": True}
     sensors = {}
     for l in lecturas_db:
         sensors[str(l["sensor_id"])] = l["valor"]
     payload["sensors"] = sensors
+
+    if first_boot:
+        payload["reset_overrides"] = True
+        print("[BOOT] Primer sync — enviando reset_overrides=True al Bridge")
 
     # Log detallado para diagnóstico
     print("[SYNC] Sending {} sensors to Bridge...".format(len(sensors)))
@@ -750,24 +756,37 @@ def sync_with_bridge(lecturas_db):
 
     # Process overrides from response
     overrides = resp.get("overrides", [])
-    active_keys = set()
-    for alerta in overrides:
-        maceta = alerta.get("maceta_numero")
-        sensor_tipo = alerta.get("sensor_tipo")
-        valor_forzado = alerta.get("valor_forzado")
-        if maceta is not None and sensor_tipo and valor_forzado is not None:
-            active_keys.add((maceta, sensor_tipo))
-            if not sensor_override.tiene_override(maceta, sensor_tipo):
-                valor_fisico = float(valor_forzado)
-                if last_lecturas.get(maceta):
-                    vf = last_lecturas[maceta].get(sensor_tipo)
-                    if vf is not None:
-                        valor_fisico = float(vf)
-                sensor_override.set_override(
-                    maceta, sensor_tipo, float(valor_forzado), valor_fisico)
-    for key in list(sensor_override.overrides.keys()):
-        if key not in active_keys:
-            sensor_override._clear_override(key[0], key[1])
+    if first_boot:
+        # Bug 1 fix: discard inherited overrides on first sync after boot
+        for alerta in overrides:
+            maceta = alerta.get("maceta_numero", "?")
+            sensor_tipo = alerta.get("sensor_tipo", "?")
+            print("[BOOT] Override heredado descartado: MAC-{} {}".format(maceta, sensor_tipo))
+        if not sensor_override.overrides == {}:
+            sensor_override.overrides = {}
+            print("[BOOT] sensor_override.overrides limpiado")
+        else:
+            print("[BOOT] sensor_override.overrides ya estaba vacío")
+        first_sync_done = True
+    else:
+        active_keys = set()
+        for alerta in overrides:
+            maceta = alerta.get("maceta_numero")
+            sensor_tipo = alerta.get("sensor_tipo")
+            valor_forzado = alerta.get("valor_forzado")
+            if maceta is not None and sensor_tipo and valor_forzado is not None:
+                active_keys.add((maceta, sensor_tipo))
+                if not sensor_override.tiene_override(maceta, sensor_tipo):
+                    valor_fisico = float(valor_forzado)
+                    if last_lecturas.get(maceta):
+                        vf = last_lecturas[maceta].get(sensor_tipo)
+                        if vf is not None:
+                            valor_fisico = float(vf)
+                    sensor_override.set_override(
+                        maceta, sensor_tipo, float(valor_forzado), valor_fisico)
+        for key in list(sensor_override.overrides.keys()):
+            if key not in active_keys:
+                sensor_override._clear_override(key[0], key[1])
 
     # Update dynamic config from response
     cfg = resp.get("config", {})
@@ -930,6 +949,7 @@ oled_timer = 0
 last_lecturas = {}
 heartbeat_timer = 0
 sync_counter = 0
+first_sync_done = False
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
 print("=== MODO HIBRIDO ACTIVADO ===")
@@ -997,7 +1017,10 @@ while True:
             sync_counter += 1
             if sync_counter >= DB_SYNC_INTERVAL:
                 sync_counter = 0
-                sync_with_bridge(lecturas_db)
+                if not first_sync_done:
+                    sync_with_bridge(lecturas_db, first_boot=True)
+                else:
+                    sync_with_bridge(lecturas_db)
 
             heartbeat_timer += 1
             if heartbeat_timer >= 20:
