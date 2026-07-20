@@ -542,28 +542,148 @@ def leer_mux(canal, samples=5):
     return total // count
 
 # ============================================================
-# LECTURA DE SENSORES - Valores estables en modo normal
+# LECTURA DE SENSORES - 2 modos
 # ============================================================
-# En modo normal (sin override), cada sensor retorna un valor FIJO.
-# Solo cambian cuando hay una simulacion activa (SensorOverride).
-# Esto garantiza que el dashboard muestre datos estables y consistentes.
+# Modo 1 (estatico): valores fijos por maceta, sin variacion.
+# Modo 2 (dinamico): oscilacion progresiva. Cada sensor tiene un
+#   valor actual y un target random. Cada ciclo se acerca un paso.
+#   Al llegar al target, se genera uno nuevo. Sin saltos bruscos.
+
+import urandom as _urandom
 
 BASELINE_TEMP = 25.0
 BASELINE_HUM_AMB = 65.0
 BASELINE_HUM_SUELO = {1: 55.0, 2: 58.0, 3: 52.0, 4: 60.0}
 BASELINE_PH = {1: 6.8, 2: 6.5, 3: 6.8, 4: 7.2}
 
+SENSOR_MODE = 1
+
+# Estado del modo dinamico (oscilacion progresiva)
+_dyn = {
+    'temp': {'val': 25.0, 'tgt': 25.0},
+    'hum_amb': {'val': 65.0, 'tgt': 65.0},
+    'hum_suelo': {1: {'val': 55.0, 'tgt': 55.0}, 2: {'val': 58.0, 'tgt': 58.0},
+                  3: {'val': 52.0, 'tgt': 52.0}, 4: {'val': 60.0, 'tgt': 60.0}},
+    'ph': {1: {'val': 6.8, 'tgt': 6.8}, 2: {'val': 6.5, 'tgt': 6.5},
+           3: {'val': 6.8, 'tgt': 6.8}, 4: {'val': 7.2, 'tgt': 7.2}}
+}
+
+# Rangos validos por tipo de sensor
+_RANGOS = {
+    'temp': (15.0, 30.0),
+    'hum_amb': (30.0, 85.0),
+    'hum_suelo': (20.0, 90.0),
+    'ph': (5.0, 8.0)
+}
+
+def _dyn_init():
+    """Inicializar estado dinamico con baselines."""
+    _dyn['temp'] = {'val': BASELINE_TEMP, 'tgt': BASELINE_TEMP}
+    _dyn['hum_amb'] = {'val': BASELINE_HUM_AMB, 'tgt': BASELINE_HUM_AMB}
+    _dyn['hum_suelo'] = {}
+    _dyn['ph'] = {}
+    for m in range(1, 5):
+        _dyn['hum_suelo'][m] = {'val': BASELINE_HUM_SUELO[m], 'tgt': BASELINE_HUM_SUELO[m]}
+        _dyn['ph'][m] = {'val': BASELINE_PH[m], 'tgt': BASELINE_PH[m]}
+
+def _dyn_random_target(rango):
+    """Generar valor random dentro del rango."""
+    lo, hi = rango
+    return round(lo + (_urandom.getrandbits(16) / 65535.0) * (hi - lo), 1)
+
+def _dyn_step(val, tgt, paso):
+    """Mover val hacia tgt por un paso. Retorna nuevo val."""
+    diff = tgt - val
+    if abs(diff) <= paso:
+        return tgt
+    if diff > 0:
+        return round(val + paso, 1)
+    return round(val - paso, 1)
+
+def _dyn_tick():
+    """Avanzar un ciclo de oscilacion para todos los sensores (cada 0.5s)."""
+    paso_temp = 0.3
+    paso_hum = 0.5
+    paso_suelo = 0.4
+    paso_ph = 0.05
+
+    s = _dyn['temp']
+    s['val'] = _dyn_step(s['val'], s['tgt'], paso_temp)
+    if abs(s['val'] - s['tgt']) < 0.01:
+        s['tgt'] = _dyn_random_target(_RANGOS['temp'])
+
+    s = _dyn['hum_amb']
+    s['val'] = _dyn_step(s['val'], s['tgt'], paso_hum)
+    if abs(s['val'] - s['tgt']) < 0.01:
+        s['tgt'] = _dyn_random_target(_RANGOS['hum_amb'])
+
+    for m in range(1, 5):
+        s = _dyn['hum_suelo'][m]
+        s['val'] = _dyn_step(s['val'], s['tgt'], paso_suelo)
+        if abs(s['val'] - s['tgt']) < 0.01:
+            s['tgt'] = _dyn_random_target(_RANGOS['hum_suelo'])
+
+        s = _dyn['ph'][m]
+        s['val'] = _dyn_step(s['val'], s['tgt'], paso_ph)
+        if abs(s['val'] - s['tgt']) < 0.01:
+            s['tgt'] = _dyn_random_target(_RANGOS['ph'])
+
+def _dyn_reset():
+    """Reset dinamico a baselines."""
+    _dyn_init()
+
+def seleccionar_modo():
+    """Menu interactivo en consola para seleccionar modo de operacion."""
+    global SENSOR_MODE
+    print("")
+    print("========================================")
+    print("  HUERTO INTELIGENTE - INV-{}".format(MODULE_ID))
+    print("========================================")
+    print("")
+    print("  Seleccione modo de operacion:")
+    print("")
+    print("  [1] ESTATICO  - Sensores con valores fijos")
+    print("                   (sin variacion)")
+    print("")
+    print("  [2] DINAMICO  - Sensores oscilan suavemente")
+    print("                   (progresivo, sin saltos)")
+    print("")
+    print("========================================")
+    try:
+        opcion = input("  Ingrese 1 o 2: ").strip()
+        if opcion == '2':
+            SENSOR_MODE = 2
+            _dyn_init()
+            print("")
+            print("  >> MODO DINAMICO ACTIVADO")
+            print("  >> Sensores oscilaran progresivamente")
+        else:
+            SENSOR_MODE = 1
+            print("")
+            print("  >> MODO ESTATICO ACTIVADO")
+            print("  >> Sensores con valores fijos")
+    except Exception:
+        SENSOR_MODE = 1
+        print("")
+        print("  >> Default: MODO ESTATICO")
+    print("")
+    print("========================================")
+    print("")
+
 def leer_dht():
-    """Retorna temperatura y humedad ambiente estables (valores fijos)."""
-    return BASELINE_TEMP, BASELINE_HUM_AMB
+    if SENSOR_MODE == 1:
+        return BASELINE_TEMP, BASELINE_HUM_AMB
+    return round(_dyn['temp']['val'], 1), round(_dyn['hum_amb']['val'], 1)
 
 def leer_suelo(maceta):
-    """Retorna humedad del suelo estable para la maceta (valor fijo)."""
-    return BASELINE_HUM_SUELO.get(maceta, 55.0)
+    if SENSOR_MODE == 1:
+        return BASELINE_HUM_SUELO.get(maceta, 55.0)
+    return round(_dyn['hum_suelo'].get(maceta, {'val': 55.0})['val'], 1)
 
 def leer_ph(maceta):
-    """Retorna pH estable para la maceta (valor fijo)."""
-    return BASELINE_PH.get(maceta, 7.0)
+    if SENSOR_MODE == 1:
+        return BASELINE_PH.get(maceta, 7.0)
+    return round(_dyn['ph'].get(maceta, {'val': 7.0})['val'], 1)
 
 def set_relay(maceta, nombre, estado):
     pin = RELAYS[maceta][nombre]
@@ -1006,17 +1126,21 @@ if wifi_ok:
     reset_overrides_boot()
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
-print("=== MODO HIBRIDO ACTIVADO ===")
 print("[CFG] Defaults: Temp:{}-{} HumAmb:{}-{} HumSuelo:{}-{} Ph:{}-{}".format(
     CFG_TEMP_MIN, CFG_TEMP_MAX, CFG_HUM_AMB_MIN, CFG_HUM_AMB_MAX,
     CFG_HUM_SUELO_MIN, CFG_HUM_SUELO_MAX, CFG_PH_MIN, CFG_PH_MAX))
 print("[CFG] DB sync cada {}s ({} ciclos)".format(DB_SYNC_INTERVAL * 0.5, DB_SYNC_INTERVAL))
+
+seleccionar_modo()
 
 while True:
     try:
         gc.collect()
         lecturas_db = []
         sync_ts_origen = time.time()
+
+        if SENSOR_MODE == 2:
+            _dyn_tick()
 
         temp_fisico, hum_amb_fisico = leer_dht()
         temp = sensor_override.get_valor(0, 'temp', temp_fisico)
