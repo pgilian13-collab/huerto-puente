@@ -323,8 +323,12 @@ def connect_wifi():
     except Exception:
         pass
     gc.collect()
-    wlan.active(True)
-    time.sleep(0.5)
+    try:
+        wlan.active(True)
+        time.sleep(0.5)
+    except Exception as e:
+        print("[WiFi] active error: {}".format(e))
+        time.sleep(2)
     if wlan.isconnected():
         print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
         return True
