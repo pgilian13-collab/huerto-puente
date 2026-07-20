@@ -317,26 +317,47 @@ lazo_cerrado = LazoCerrado()
 
 def connect_wifi():
     wlan = network.WLAN(network.STA_IF)
+    try:
+        wlan.active(False)
+        time.sleep(1)
+    except Exception:
+        pass
+    gc.collect()
     wlan.active(True)
+    time.sleep(0.5)
     if wlan.isconnected():
         print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
         return True
-    
-    print("[WiFi] '{}'...".format(WIFI_SSID))
-    wlan.connect(WIFI_SSID, WIFI_PASS)
-    
-    timeout = 15
-    while not wlan.isconnected() and timeout > 0:
-        time.sleep(1)
-        timeout -= 1
-    
-    if wlan.isconnected():
-        config = wlan.ifconfig()
-        print("[WiFi] OK IP: {}".format(config[0]))
-        return True
-    else:
-        print("[WiFi] FAIL")
-        return False
+
+    delays = [2, 3, 5, 5, 5]
+    for intento in range(5):
+        try:
+            wlan.active(False)
+            time.sleep(1)
+            gc.collect()
+            wlan.active(True)
+            time.sleep(1)
+        except Exception:
+            pass
+        try:
+            print("[WiFi] Intento {} de 5 - '{}'...".format(intento + 1, WIFI_SSID))
+            wlan.connect(WIFI_SSID, WIFI_PASS)
+            timeout = 12
+            while not wlan.isconnected() and timeout > 0:
+                time.sleep(1)
+                timeout -= 1
+            if wlan.isconnected():
+                config = wlan.ifconfig()
+                print("[WiFi] OK IP: {}".format(config[0]))
+                return True
+            else:
+                print("[WiFi] Intento {} timeout".format(intento + 1))
+        except Exception as e:
+            print("[WiFi] Intento {} error: {}".format(intento + 1, e))
+        time.sleep(delays[intento])
+
+    print("[WiFi] FAIL despues de 5 intentos")
+    return False
 
 # ============================================================
 # PIN MAP - 4 Macetas via MUX CD74HC4067
@@ -771,6 +792,7 @@ def sync_with_bridge(lecturas_db, first_boot=False):
     for l in lecturas_db:
         sensors[str(l["sensor_id"])] = l["valor"]
     payload["sensors"] = sensors
+    payload["ts_origen_sync"] = lecturas_db[0]["ts"] if lecturas_db else time.time()
 
     if first_boot:
         payload["reset_overrides"] = True
@@ -1046,14 +1068,15 @@ while True:
     try:
         gc.collect()
         lecturas_db = []
+        sync_ts_origen = time.time()
 
         temp_fisico, hum_amb_fisico = leer_dht()
         temp = sensor_override.get_valor(0, 'temp', temp_fisico)
         hum_amb = sensor_override.get_valor(0, 'hum_amb', hum_amb_fisico)
 
         base_shared = (MODULE_ID - 1) * 10
-        lecturas_db.append({"sensor_id": base_shared, "valor": temp})
-        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb})
+        lecturas_db.append({"sensor_id": base_shared, "valor": temp, "ts": sync_ts_origen})
+        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb, "ts": sync_ts_origen})
 
         last_lecturas[0] = {'temp': temp, 'hum_amb': hum_amb}
 
@@ -1066,9 +1089,9 @@ while True:
             
             base_mac = base_shared + 2 + (m - 1) * 2
             if hum_suelo is not None:
-                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo})
+                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo, "ts": sync_ts_origen})
             if ph is not None:
-                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph})
+                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph, "ts": sync_ts_origen})
 
             last_lecturas[m] = {
                 'temp': temp, 'hum_amb': hum_amb,
@@ -1094,6 +1117,14 @@ while True:
         wlan = network.WLAN(network.STA_IF)
         if not wlan.isconnected():
             print("[WiFi] Reconectando...")
+            try:
+                wlan.active(False)
+                time.sleep(1)
+                gc.collect()
+                wlan.active(True)
+                time.sleep(1)
+            except Exception:
+                pass
             wifi_ok = connect_wifi()
         
         gc.collect()
