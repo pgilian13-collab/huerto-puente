@@ -212,7 +212,7 @@ var DashboardModule = (function() {
         html += '<div class="bottom-grid">';
 
         // Historical chart
-        html += '<div class="panel"><div class="panel-header"><span class="material-icons-round">timeline</span><h3>Historico - 24h</h3><div class="panel-header-actions"><div class="panel-tag">SYS//CHART</div><span id="simModeBadge" class="sim-mode-badge" style="display:none;">SIMULACION ACTIVA</span></div></div>';
+        html += '<div class="panel"><div class="panel-header"><span class="material-icons-round">timeline</span><h3>Historico - 24h</h3><div class="panel-header-actions"><div class="panel-tag">SYS//CHART</div><span id="simModeBadge" class="sim-mode-badge" style="display:none;">SIMULACION ACTIVA</span><span id="latencyBadge" class="latency-badge" style="display:none;">LATENCIA: --</span></div></div>';
         html += '<div class="chart-container"><canvas id="chartHistorico"></canvas></div>';
         html += '<div style="padding:12px;text-align:right;"><button class="brutalist-btn" id="btnRefreshChart" style="padding:8px 16px;font-size:12px;"><span class="material-icons-round" style="font-size:16px;">refresh</span> Actualizar</button></div></div>';
 
@@ -581,6 +581,26 @@ var DashboardModule = (function() {
         }
     }
 
+    function updateLatencyBadge(latencyMs) {
+        var badge = document.getElementById('latencyBadge');
+        if (!badge) return;
+        if (latencyMs == null || isNaN(latencyMs)) {
+            badge.style.display = 'none';
+            return;
+        }
+        var sec = (latencyMs / 1000).toFixed(1);
+        badge.style.display = 'inline-flex';
+        badge.textContent = 'LATENCIA: ' + sec + 's';
+        badge.className = 'latency-badge';
+        if (latencyMs < 5000) {
+            badge.classList.add('ok');
+        } else if (latencyMs < 15000) {
+            badge.classList.add('warn');
+        } else {
+            badge.classList.add('crit');
+        }
+    }
+
     function val(id, fallback) {
         var el = document.getElementById(id);
         return el ? parseFloat(el.value) : fallback;
@@ -620,7 +640,7 @@ var DashboardModule = (function() {
         }
     }
 
-    return { init: init, destroy: destroy, loadConfigFromSupabase: loadConfigFromSupabase, setSkeletonActive: setSkeletonActive, initTooltips: initTooltips, getThreshold: getThreshold };
+    return { init: init, destroy: destroy, loadConfigFromSupabase: loadConfigFromSupabase, setSkeletonActive: setSkeletonActive, initTooltips: initTooltips, getThreshold: getThreshold, updateLatencyBadge: updateLatencyBadge };
 })();
 
 if (typeof window !== 'undefined') window.DashboardModule = DashboardModule;

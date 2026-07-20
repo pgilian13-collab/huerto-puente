@@ -8,7 +8,7 @@
 var SensorService = (function() {
     var pollTimer = null;
     var realtimeChannel = null;
-    var POLL_MS = 2000;
+    var POLL_MS = 15000;
     var USE_REALTIME = true;
     var INV_INDEX = 0;
     var connectionStartTime = null;
@@ -38,6 +38,24 @@ var SensorService = (function() {
             rows.forEach(function(r) {
                 if (!latest[r.sensor_id]) latest[r.sensor_id] = r;
             });
+            // Medir latencia: tiempo desde que ESP32 leyó el sensor hasta que llega al dashboard
+            try {
+                var tsKeys = Object.keys(latest).filter(function(k) { return latest[k] && latest[k].fecha_hora; });
+                if (tsKeys.length > 0) {
+                    var oldest = null;
+                    tsKeys.forEach(function(k) {
+                        var t = new Date(latest[k].fecha_hora).getTime();
+                        if (!oldest || t < oldest) oldest = t;
+                    });
+                    if (oldest) {
+                        var latencyMs = Date.now() - oldest;
+                        if (window.DashboardModule && typeof DashboardModule.updateLatencyBadge === 'function') {
+                            DashboardModule.updateLatencyBadge(latencyMs);
+                        }
+                        console.log('[LATENCY] Wokwi->HTML:', latencyMs + 'ms (' + (latencyMs/1000).toFixed(1) + 's)');
+                    }
+                }
+            } catch (e) {}
             return latest;
         });
     }

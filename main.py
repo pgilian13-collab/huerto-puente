@@ -36,8 +36,8 @@ CFG_PH_MIN = 5.5
 CFG_PH_MAX = 7.5
 
 # Frecuencia de escritura a Supabase (en ciclos de 0.5s)
-# 10 ciclos = 5 segundos, 15 = 7.5s, 20 = 10s, 30 = 15s
-DB_SYNC_INTERVAL = 10
+# 30 ciclos = 15 segundos, sincronizado con dashboard poll
+DB_SYNC_INTERVAL = 30
 
 # ============================================================
 # SENSOR OVERRIDE - Forzado de valores por software
@@ -521,39 +521,127 @@ def leer_mux(canal, samples=5):
     return total // count
 
 def leer_suelo(maceta):
+    """Lee humedad del suelo desde MUX.
+
+    Sin variacion aleatoria: si falla, usa baseline estable de la maceta.
+    """
     raw = leer_mux(SOIL_CH[maceta - 1])
     if raw < 200 or raw > 3800:
-        return None
+        return baseline_mgr.get_baseline('hum_suelo', maceta)
     moisture = int(raw * 0.66)
     pct = int((moisture - 1000) / (3500 - 1000) * 100)
     return max(0, min(pct, 100))
 
 def leer_ph(maceta):
+    """Lee pH desde MUX.
+
+    Sin variacion aleatoria: si falla, usa baseline estable de la maceta.
+    """
     raw = leer_mux(PH_CH[maceta - 1])
     if raw < 200 or raw > 3800:
-        return None
+        return baseline_mgr.get_baseline('ph', maceta)
     vadc = raw / 4095 * 3.3
     if vadc > 3.3:
         vadc = 3.3
     ph = (4.2 - vadc) / 0.3
     return round(max(0.0, min(ph, 14.0)), 2)
 
-# Lectura del DHT22 (temperatura y humedad ambiente compartidas)
-# Intenta leer el sensor real; si falla o devuelve siempre el mismo valor,
-# agrega pequena variacion natural (random walk) para no mostrar constantes.
-import urandom as _urandom
-_dht_state = {'t_base': 25.0, 'h_base': 60.0, 't_last': 25.0, 'h_last': 60.0, 'static_count': 0}
+# ============================================================
+# BASELINE MANAGER - Valores base estables para modo normal
+# ============================================================
+# En modo normal, los sensores devuelven estos valores constantes
+# (reflejan la planta seleccionada o los defaults del sistema).
+# Variacion SOLO cuando SensorOverride esta activo (simulacion).
 
-def _dht_jitter(base, jitter):
-    """Pseudo-random walk alrededor del valor base."""
-    delta = (_urandom.getrandbits(16) / 65535.0 - 0.5) * 2 * jitter
-    return base + delta
+BASELINE_VALUES = {
+    'temp': 24.5,
+    'hum_amb': 65.0,
+    'hum_suelo': {1: 55.0, 2: 58.0, 3: 52.0, 4: 60.0},
+    'ph': {1: 6.8, 2: 6.7, 3: 6.9, 4: 6.6}
+}
+
+class BaselineManager:
+    """Administra valores base estables para sensores en modo normal.
+
+    En modo normal, los sensores devuelven estos valores (sin variacion).
+    Cuando se activa una simulacion (SensorOverride), los valores cambian
+    via override. Cuando termina la simulacion, vuelven a estos baselines.
+    """
+
+    def __init__(self):
+        self.values = {
+            'temp': BASELINE_VALUES['temp'],
+            'hum_amb': BASELINE_VALUES['hum_amb'],
+            'hum_suelo': dict(BASELINE_VALUES['hum_suelo']),
+            'ph': dict(BASELINE_VALUES['ph'])
+        }
+        self.simulation_active = False
+
+    def get_baseline(self, sensor_tipo, maceta=None):
+        """Devuelve el valor baseline estable (sin variacion aleatoria)."""
+        if sensor_tipo in ('hum_suelo', 'ph') and maceta is not None:
+            return self.values[sensor_tipo].get(maceta, 50.0 if sensor_tipo == 'hum_suelo' else 7.0)
+        return self.values.get(sensor_tipo, 50.0)
+
+    def set_baseline(self, sensor_tipo, maceta, valor):
+        """Actualiza un baseline individual."""
+        if sensor_tipo in ('hum_suelo', 'ph'):
+            self.values[sensor_tipo][maceta] = float(valor)
+        else:
+            self.values[sensor_tipo] = float(valor)
+
+    def set_baseline_from_plant(self, planta, maceta=None):
+        """Actualiza baselines desde una planta del catalogo.
+
+        Para sensores globales (temp, hum_amb) usa el midpoint del rango.
+        Para sensores por maceta usa el midpoint del rango de la planta.
+        """
+        if not planta:
+            return
+        if planta.get('temp_min') is not None and planta.get('temp_max') is not None:
+            self.values['temp'] = round((planta['temp_min'] + planta['temp_max']) / 2.0, 1)
+        if planta.get('hum_ambiente_min') is not None and planta.get('hum_ambiente_max') is not None:
+            self.values['hum_amb'] = round((planta['hum_ambiente_min'] + planta['hum_ambiente_max']) / 2.0, 1)
+        if maceta is not None:
+            if planta.get('hum_suelo_min') is not None and planta.get('hum_suelo_max') is not None:
+                self.values['hum_suelo'][maceta] = round((planta['hum_suelo_min'] + planta['hum_suelo_max']) / 2.0, 1)
+            if planta.get('ph_min') is not None and planta.get('ph_max') is not None:
+                self.values['ph'][maceta] = round((planta['ph_min'] + planta['ph_max']) / 2.0, 2)
+
+    def update_from_payload(self, payload):
+        """Actualiza baselines desde un payload (de bridge o frontend)."""
+        if 'temp' in payload:
+            self.values['temp'] = float(payload['temp'])
+        if 'hum_amb' in payload:
+            self.values['hum_amb'] = float(payload['hum_amb'])
+        if 'hum_suelo' in payload:
+            if isinstance(payload['hum_suelo'], dict):
+                for k, v in payload['hum_suelo'].items():
+                    self.values['hum_suelo'][int(k)] = float(v)
+            elif 'maceta' in payload:
+                self.values['hum_suelo'][int(payload['maceta'])] = float(payload['hum_suelo'])
+        if 'ph' in payload:
+            if isinstance(payload['ph'], dict):
+                for k, v in payload['ph'].items():
+                    self.values['ph'][int(k)] = float(v)
+            elif 'maceta' in payload:
+                self.values['ph'][int(payload['maceta'])] = float(payload['ph'])
+
+    def set_simulation_active(self, active):
+        self.simulation_active = bool(active)
+
+baseline_mgr = BaselineManager()
+
 
 def leer_dht():
-    global _dht_state
+    """Lee el DHT22 (temperatura y humedad ambiente).
+
+    Sin variacion aleatoria: si el sensor falla, usa baseline estable.
+    Si hay override activo, devuelve el valor del override.
+    """
     raw_t = None
     raw_h = None
-    for _ in range(5):
+    for _ in range(3):
         try:
             dht_sensor.measure()
             t = dht_sensor.temperature()
@@ -565,32 +653,13 @@ def leer_dht():
             pass
         time.sleep_ms(150)
 
+    # Si no hay lectura real, usar baseline estable (NO random)
     if raw_t is None:
-        # Fallback: usar ultimo valor conocido o base
-        raw_t = _dht_state.get('t_last', 25.0)
-        raw_h = _dht_state.get('h_last', 60.0)
+        raw_t = baseline_mgr.get_baseline('temp')
+    if raw_h is None:
+        raw_h = baseline_mgr.get_baseline('hum_amb')
 
-    # Detectar si el sensor esta congelado (devuelve mismo valor siempre)
-    if abs(raw_t - _dht_state['t_last']) < 0.05 and abs(raw_h - _dht_state['h_last']) < 0.05:
-        _dht_state['static_count'] += 1
-    else:
-        _dht_state['static_count'] = 0
-        # Actualizar base con la lectura real cuando cambia
-        _dht_state['t_base'] = raw_t
-        _dht_state['h_base'] = raw_h
-
-    # Si el sensor lleva mas de 3 lecturas con el mismo valor, anadir jitter
-    # para simular ruido real del sensor
-    if _dht_state['static_count'] >= 3:
-        t_out = round(_dht_jitter(_dht_state['t_base'], 0.6), 1)
-        h_out = round(_dht_jitter(_dht_state['h_base'], 1.5), 1)
-    else:
-        t_out = round(raw_t, 1)
-        h_out = round(raw_h, 1)
-
-    _dht_state['t_last'] = t_out
-    _dht_state['h_last'] = h_out
-    return t_out, h_out
+    return round(raw_t, 1), round(raw_h, 1)
 
 # ============================================================
 # FUNCIONES RELAYS
@@ -771,6 +840,7 @@ def sync_with_bridge(lecturas_db, first_boot=False):
     for l in lecturas_db:
         sensors[str(l["sensor_id"])] = l["valor"]
     payload["sensors"] = sensors
+    payload["ts_origen_sync"] = lecturas_db[0]["ts"] if lecturas_db else time.time()
 
     if first_boot:
         payload["reset_overrides"] = True
@@ -1047,28 +1117,31 @@ while True:
         gc.collect()
         lecturas_db = []
 
+        # Timestamp al momento de LEER los sensores (para medir latencia Wokwi→HTML)
+        sync_ts_origen = time.time()
+
         temp_fisico, hum_amb_fisico = leer_dht()
         temp = sensor_override.get_valor(0, 'temp', temp_fisico)
         hum_amb = sensor_override.get_valor(0, 'hum_amb', hum_amb_fisico)
 
         base_shared = (MODULE_ID - 1) * 10
-        lecturas_db.append({"sensor_id": base_shared, "valor": temp})
-        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb})
+        lecturas_db.append({"sensor_id": base_shared, "valor": temp, "ts": sync_ts_origen})
+        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb, "ts": sync_ts_origen})
 
         last_lecturas[0] = {'temp': temp, 'hum_amb': hum_amb}
 
         for m in range(1, 5):
             hum_suelo_fisico = leer_suelo(m)
             ph_fisico = leer_ph(m)
-            
+
             hum_suelo = sensor_override.get_valor(m, 'hum_suelo', hum_suelo_fisico)
             ph = sensor_override.get_valor(m, 'ph', ph_fisico)
-            
+
             base_mac = base_shared + 2 + (m - 1) * 2
             if hum_suelo is not None:
-                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo})
+                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo, "ts": sync_ts_origen})
             if ph is not None:
-                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph})
+                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph, "ts": sync_ts_origen})
 
             last_lecturas[m] = {
                 'temp': temp, 'hum_amb': hum_amb,
@@ -1085,11 +1158,14 @@ while True:
                              sensor_override.tiene_override(m, 'ph'))
             override_shared = (sensor_override.tiene_override(0, 'temp') or
                              sensor_override.tiene_override(0, 'hum_amb'))
-            
+
+            # Actualizar flag global de simulacion
+            baseline_mgr.set_simulation_active(override_activo or override_shared)
+
             if override_activo or override_shared:
                 print("MAC-{} [OVR] T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
             else:
-                print("MAC-{} T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
+                print("MAC-{} [BSL] T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
 
         wlan = network.WLAN(network.STA_IF)
         if not wlan.isconnected():
@@ -1107,7 +1183,7 @@ while True:
                     sync_with_bridge(lecturas_db)
 
             heartbeat_timer += 1
-            if heartbeat_timer >= 20:
+            if heartbeat_timer >= 30:
                 heartbeat_timer = 0
                 llamar_heartbeat()
         else:

@@ -159,6 +159,13 @@ async def sync_device(data: dict):
     device_id = data.get("device", data.get("dispositivo_id", 1))
     sensors = data.get("sensors", {})
     pending = data.get("pending", False)
+    ts_origen_sync = data.get("ts_origen_sync", 0)
+
+    # Medir latencia: cuanto tarda el dato desde ESP32 hasta el bridge
+    ts_received = time.time()
+    if ts_origen_sync and ts_origen_sync > 0:
+        latency_esp32_to_bridge_ms = int((ts_received - ts_origen_sync) * 1000)
+        print(f"[LATENCY] ESP32->Bridge: {latency_esp32_to_bridge_ms}ms (device={device_id})")
     reset_overrides = data.get("reset_overrides", False)
 
     sensors_ok = 0
@@ -177,6 +184,10 @@ async def sync_device(data: dict):
             print(f"[SYNC] Reset overrides error: {e}")
 
     # 1) Batch insert into monitoreo_lecturas (table that frontend reads from)
+    sensors_ok = 0
+    sensors_failed = 0
+    ts_before_insert = 0
+    ts_after_insert = 0
     if sensors:
         batch = []
         for sensor_id_str, valor in sensors.items():
@@ -185,6 +196,7 @@ async def sync_device(data: dict):
                 "valor_lectura": round(float(valor), 2),
             })
         try:
+            ts_before_insert = time.time()
             resp = await client.post(
                 f"{SUPABASE_URL}/rest/v1/monitoreo_lecturas",
                 json=batch,
@@ -193,6 +205,7 @@ async def sync_device(data: dict):
                     "Prefer": "return=minimal",
                 },
             )
+            ts_after_insert = time.time()
             if resp.status_code in (200, 201, 204):
                 sensors_ok = len(batch)
             else:
@@ -200,7 +213,13 @@ async def sync_device(data: dict):
                 print(f"[SYNC] Insert error: {resp.status_code} {resp.text[:200]}")
         except Exception as e:
             sensors_failed = len(batch)
+            ts_after_insert = time.time()
             print(f"[SYNC] Insert error: {e}")
+
+    # Calcular latencia Bridge->Supabase
+    latency_bridge_to_db_ms = 0
+    if ts_before_insert > 0 and ts_after_insert > 0:
+        latency_bridge_to_db_ms = int((ts_after_insert - ts_before_insert) * 1000)
 
     # 2) Only query commands + overrides if ESP32 requests them
     commands = []
@@ -340,6 +359,12 @@ async def sync_device(data: dict):
         "overrides": overrides,
         "config": config if pending else {},
         "cleanup": cleanup_needed,
+        "latency": {
+            "esp32_to_bridge_ms": latency_esp32_to_bridge_ms if ts_origen_sync else None,
+            "bridge_to_db_ms": latency_bridge_to_db_ms,
+            "ts_origen_esp32": ts_origen_sync,
+            "ts_received_bridge": int(ts_received * 1000)
+        }
     }
 
 
