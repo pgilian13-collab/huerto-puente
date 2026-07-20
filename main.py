@@ -541,78 +541,29 @@ def leer_mux(canal, samples=5):
         time.sleep_ms(5)
     return total // count
 
-def leer_suelo(maceta):
-    raw = leer_mux(SOIL_CH[maceta - 1])
-    if raw < 200 or raw > 3800:
-        return None
-    vadc = raw / 4095 * 3.3
-    moisture_pct = int((vadc / 3.3) * 100)
-    return max(0, min(moisture_pct, 100))
+# ============================================================
+# LECTURA DE SENSORES - Valores estables en modo normal
+# ============================================================
+# En modo normal (sin override), cada sensor retorna un valor FIJO.
+# Solo cambian cuando hay una simulacion activa (SensorOverride).
+# Esto garantiza que el dashboard muestre datos estables y consistentes.
 
-def leer_ph(maceta):
-    raw = leer_mux(PH_CH[maceta - 1])
-    if raw < 200 or raw > 3800:
-        return None
-    vadc = raw / 4095 * 3.3
-    if vadc > 3.3:
-        vadc = 3.3
-    ph = (3.712 - vadc) / 0.3
-    return round(max(0.0, min(ph, 14.0)), 2)
-
-# Lectura del DHT22 (temperatura y humedad ambiente compartidas)
-# Intenta leer el sensor real; si falla o devuelve siempre el mismo valor,
-# agrega pequena variacion natural (random walk) para no mostrar constantes.
-import urandom as _urandom
-_dht_state = {'t_base': 25.0, 'h_base': 65.0, 't_last': 25.0, 'h_last': 65.0, 'static_count': 0}
-
-def _dht_jitter(base, jitter):
-    """Pseudo-random walk alrededor del valor base."""
-    delta = (_urandom.getrandbits(16) / 65535.0 - 0.5) * 2 * jitter
-    return base + delta
+BASELINE_TEMP = 25.0
+BASELINE_HUM_AMB = 65.0
+BASELINE_HUM_SUELO = {1: 55.0, 2: 58.0, 3: 52.0, 4: 60.0}
+BASELINE_PH = {1: 6.8, 2: 6.5, 3: 6.8, 4: 7.2}
 
 def leer_dht():
-    global _dht_state
-    raw_t = None
-    raw_h = None
-    for _ in range(5):
-        try:
-            dht_sensor.measure()
-            t = dht_sensor.temperature()
-            h = dht_sensor.humidity()
-            if t is not None and h is not None and -10 <= t <= 60 and 0 <= h <= 100:
-                raw_t, raw_h = float(t), float(h)
-                break
-        except Exception:
-            pass
-        time.sleep_ms(150)
+    """Retorna temperatura y humedad ambiente estables (valores fijos)."""
+    return BASELINE_TEMP, BASELINE_HUM_AMB
 
-    if raw_t is None:
-        raw_t = _dht_state.get('t_last', 25.0)
-        raw_h = _dht_state.get('h_last', 65.0)
+def leer_suelo(maceta):
+    """Retorna humedad del suelo estable para la maceta (valor fijo)."""
+    return BASELINE_HUM_SUELO.get(maceta, 55.0)
 
-    if abs(raw_t - _dht_state['t_last']) < 0.05 and abs(raw_h - _dht_state['h_last']) < 0.05:
-        _dht_state['static_count'] += 1
-    else:
-        _dht_state['static_count'] = 0
-        _dht_state['t_base'] = raw_t
-        _dht_state['h_base'] = raw_h
-
-    if _dht_state['static_count'] >= 3:
-        _dht_state['t_base'] = 25.0
-        _dht_state['h_base'] = 65.0
-        t_out = round(_dht_jitter(_dht_state['t_base'], 0.6), 1)
-        h_out = round(_dht_jitter(_dht_state['h_base'], 1.5), 1)
-    else:
-        t_out = round(raw_t, 1)
-        h_out = round(raw_h, 1)
-
-    _dht_state['t_last'] = t_out
-    _dht_state['h_last'] = h_out
-    return t_out, h_out
-
-# ============================================================
-# FUNCIONES RELAYS
-# ============================================================
+def leer_ph(maceta):
+    """Retorna pH estable para la maceta (valor fijo)."""
+    return BASELINE_PH.get(maceta, 7.0)
 
 def set_relay(maceta, nombre, estado):
     pin = RELAYS[maceta][nombre]
