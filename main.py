@@ -580,6 +580,8 @@ BASELINE_HUM_SUELO = {1: 55.0, 2: 58.0, 3: 52.0, 4: 60.0}
 BASELINE_PH = {1: 6.8, 2: 6.5, 3: 6.8, 4: 7.2}
 
 SENSOR_MODE = 1
+# Default de modo si no hay boton en GPIO13: 1=estatico, 2=dinamico
+SENSOR_MODE_DEFAULT = 1
 
 # Estado del modo dinamico (oscilacion progresiva)
 _dyn = {
@@ -656,40 +658,41 @@ def _dyn_reset():
     _dyn_init()
 
 def seleccionar_modo():
-    """Menu interactivo en consola para seleccionar modo de operacion."""
+    """Selecciona modo de operacion.
+
+    Wokwi NO acepta input por terminal, asi que usamos un boton en GPIO13
+    (pull-up). Si el boton esta PRESIONADO al arrancar -> MODO 2 (dinamico).
+    Si no hay boton o no se presiona -> MODO 1 (estatico, default seguro).
+
+    Para forzar un modo sin boton, cambia SENSOR_MODE_DEFAULT abajo.
+    """
     global SENSOR_MODE
     print("")
     print("========================================")
     print("  HUERTO INTELIGENTE - INV-{}".format(MODULE_ID))
     print("========================================")
     print("")
-    print("  Seleccione modo de operacion:")
-    print("")
-    print("  [1] ESTATICO  - Sensores con valores fijos")
-    print("                   (sin variacion)")
-    print("")
-    print("  [2] DINAMICO  - Sensores oscilan suavemente")
-    print("                   (progresivo, sin saltos)")
-    print("")
+    print("  [1] ESTATICO  - valores fijos (sin variacion)")
+    print("  [2] DINAMICO  - oscilacion suave progresiva")
     print("========================================")
+
+    # Default configurable sin necesidad de boton
+    SENSOR_MODE = SENSOR_MODE_DEFAULT
+
+    # Boton opcional en GPIO13 (pull-up): presionado -> dinamico
     try:
-        opcion = input("  Ingrese 1 o 2: ").strip()
-        if opcion == '2':
+        btn = Pin(13, Pin.IN, Pin.PULL_UP)
+        time.sleep_ms(50)
+        if btn.value() == 0:  # 0 = presionado con pull-up
             SENSOR_MODE = 2
-            _dyn_init()
-            print("")
-            print("  >> MODO DINAMICO ACTIVADO")
-            print("  >> Sensores oscilaran progresivamente")
-        else:
-            SENSOR_MODE = 1
-            print("")
-            print("  >> MODO ESTATICO ACTIVADO")
-            print("  >> Sensores con valores fijos")
     except Exception:
-        SENSOR_MODE = 1
-        print("")
-        print("  >> Default: MODO ESTATICO")
-    print("")
+        pass  # sin boton -> queda en default
+
+    if SENSOR_MODE == 2:
+        _dyn_init()
+        print("  >> MODO DINAMICO ACTIVADO")
+    else:
+        print("  >> MODO ESTATICO ACTIVADO (default)")
     print("========================================")
     print("")
 
