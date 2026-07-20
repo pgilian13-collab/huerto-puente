@@ -521,30 +521,26 @@ def leer_mux(canal, samples=5):
     return total // count
 
 def leer_suelo(maceta):
-    """Lee humedad del suelo desde MUX.
-
-    Sin variacion aleatoria: si falla, usa baseline estable de la maceta.
+    """Retorna humedad del suelo del cache (estable, sin ruido ADC).
+    Override se aplica arriba en get_valor().
     """
-    raw = leer_mux(SOIL_CH[maceta - 1])
-    if raw < 200 or raw > 3800:
+    if not _sensor_cache['initialized']:
+        init_sensor_cache()
+    val = _sensor_cache['hum_suelo'].get(maceta)
+    if val is None:
         return baseline_mgr.get_baseline('hum_suelo', maceta)
-    moisture = int(raw * 0.66)
-    pct = int((moisture - 1000) / (3500 - 1000) * 100)
-    return max(0, min(pct, 100))
+    return val
 
 def leer_ph(maceta):
-    """Lee pH desde MUX.
-
-    Sin variacion aleatoria: si falla, usa baseline estable de la maceta.
+    """Retorna pH del cache (estable, sin ruido ADC).
+    Override se aplica arriba en get_valor().
     """
-    raw = leer_mux(PH_CH[maceta - 1])
-    if raw < 200 or raw > 3800:
+    if not _sensor_cache['initialized']:
+        init_sensor_cache()
+    val = _sensor_cache['ph'].get(maceta)
+    if val is None:
         return baseline_mgr.get_baseline('ph', maceta)
-    vadc = raw / 4095 * 3.3
-    if vadc > 3.3:
-        vadc = 3.3
-    ph = (4.2 - vadc) / 0.3
-    return round(max(0.0, min(ph, 14.0)), 2)
+    return val
 
 # ============================================================
 # BASELINE MANAGER - Valores base estables para modo normal
@@ -633,12 +629,26 @@ class BaselineManager:
 baseline_mgr = BaselineManager()
 
 
-def leer_dht():
-    """Lee el DHT22 (temperatura y humedad ambiente).
+# ============================================================
+# SENSOR CACHE - Lectura unica al boot, valores estables
+# ============================================================
+# El ESP32 lee cada sensor UNA SOLA VEZ al arrancar y guarda el
+# valor en cache. En modo normal siempre retorna el cache (estable).
+# Solo cambia cuando:
+#   - Hay un override activo (SensorOverride 3 fases)
+#   - Se actualiza el baseline desde frontend (nueva planta)
+# Esto evita que el ruido del ADC MUX haga oscilar los valores.
+_sensor_cache = {
+    'temp': None,
+    'hum_amb': None,
+    'hum_suelo': {1: None, 2: None, 3: None, 4: None},
+    'ph': {1: None, 2: None, 3: None, 4: None},
+    'initialized': False
+}
 
-    Sin variacion aleatoria: si el sensor falla, usa baseline estable.
-    Si hay override activo, devuelve el valor del override.
-    """
+
+def _leer_dht_raw():
+    """Lee el DHT22 una sola vez (sin cache)."""
     raw_t = None
     raw_h = None
     for _ in range(3):
@@ -652,14 +662,93 @@ def leer_dht():
         except Exception:
             pass
         time.sleep_ms(150)
-
-    # Si no hay lectura real, usar baseline estable (NO random)
     if raw_t is None:
         raw_t = baseline_mgr.get_baseline('temp')
     if raw_h is None:
         raw_h = baseline_mgr.get_baseline('hum_amb')
-
     return round(raw_t, 1), round(raw_h, 1)
+
+
+def _leer_mux_raw(canal):
+    """Lee el MUX una sola vez sin cache (promedia 5 muestras)."""
+    MUX_S0.value(canal & 1)
+    MUX_S1.value((canal >> 1) & 1)
+    MUX_S2.value((canal >> 2) & 1)
+    MUX_S3.value((canal >> 3) & 1)
+    time.sleep_ms(50)
+    MUX_SIG.read()
+    total = 0
+    for _ in range(5):
+        total += MUX_SIG.read()
+        time.sleep_ms(5)
+    return total // 5
+
+
+def init_sensor_cache():
+    """Inicializa el cache con UNA lectura real de cada sensor."""
+    global _sensor_cache
+    if _sensor_cache['initialized']:
+        return
+    # DHT22
+    t, h = _leer_dht_raw()
+    _sensor_cache['temp'] = t
+    _sensor_cache['hum_amb'] = h
+    # MUX - suelo y pH por maceta
+    for m in range(1, 5):
+        raw_s = _leer_mux_raw(SOIL_CH[m - 1])
+        if 200 <= raw_s <= 3800:
+            moisture = int(raw_s * 0.66)
+            pct = int((moisture - 1000) / (3500 - 1000) * 100)
+            _sensor_cache['hum_suelo'][m] = max(0, min(pct, 100))
+        else:
+            _sensor_cache['hum_suelo'][m] = baseline_mgr.get_baseline('hum_suelo', m)
+        raw_p = _leer_mux_raw(PH_CH[m - 1])
+        if 200 <= raw_p <= 3800:
+            vadc = raw_p / 4095 * 3.3
+            if vadc > 3.3:
+                vadc = 3.3
+            ph = (4.2 - vadc) / 0.3
+            _sensor_cache['ph'][m] = round(max(0.0, min(ph, 14.0)), 2)
+        else:
+            _sensor_cache['ph'][m] = baseline_mgr.get_baseline('ph', m)
+    _sensor_cache['initialized'] = True
+    print("[CACHE] Lectura inicial estable: T={} H={} S={} P={}".format(
+        _sensor_cache['temp'], _sensor_cache['hum_amb'],
+        [_sensor_cache['hum_suelo'][m] for m in range(1, 5)],
+        [_sensor_cache['ph'][m] for m in range(1, 5)]))
+
+
+def invalidate_sensor_cache():
+    """Fuerza re-lectura (llamar cuando llega nueva planta desde bridge)."""
+    global _sensor_cache
+    _sensor_cache['initialized'] = False
+    print("[CACHE] Invalidado, proxima lectura sera fresca")
+
+
+def update_cache_from_baseline():
+    """Actualiza cache desde el baseline actual (sin re-leer sensor fisico)."""
+    global _sensor_cache
+    if not _sensor_cache['initialized']:
+        return
+    _sensor_cache['temp'] = baseline_mgr.get_baseline('temp')
+    _sensor_cache['hum_amb'] = baseline_mgr.get_baseline('hum_amb')
+    for m in range(1, 5):
+        _sensor_cache['hum_suelo'][m] = baseline_mgr.get_baseline('hum_suelo', m)
+        _sensor_cache['ph'][m] = baseline_mgr.get_baseline('ph', m)
+    print("[CACHE] Actualizado desde baseline: T={} H={} S={} P={}".format(
+        _sensor_cache['temp'], _sensor_cache['hum_amb'],
+        [_sensor_cache['hum_suelo'][m] for m in range(1, 5)],
+        [_sensor_cache['ph'][m] for m in range(1, 5)]))
+
+
+def leer_dht():
+    """Retorna valores DHT22 del cache (estables).
+    Si no hay cache, lo inicializa con una lectura.
+    Override se aplica arriba en get_valor().
+    """
+    if not _sensor_cache['initialized']:
+        init_sensor_cache()
+    return _sensor_cache['temp'], _sensor_cache['hum_amb']
 
 # ============================================================
 # FUNCIONES RELAYS
@@ -956,6 +1045,11 @@ def sync_with_bridge(lecturas_db, first_boot=False):
             CFG_TEMP_MIN, CFG_TEMP_MAX, CFG_HUM_AMB_MIN, CFG_HUM_AMB_MAX,
             CFG_HUM_SUELO_MIN, CFG_HUM_SUELO_MAX, CFG_PH_MIN, CFG_PH_MAX))
 
+    # Si llega una nueva config desde el bridge, invalidar cache para re-leer
+    # (la proxima lectura tomara el baseline actualizado)
+    if _sensor_cache['initialized'] and cfg:
+        invalidate_sensor_cache()
+
     # Cleanup if needed
     if resp.get("cleanup"):
         _http_post("/api/simulacion/cleanup", {}, timeout=8)
@@ -1104,6 +1198,9 @@ first_sync_done = False
 
 if wifi_ok:
     reset_overrides_boot()
+
+# Inicializar cache de sensores (una sola lectura al boot, valores estables)
+init_sensor_cache()
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
 print("=== MODO HIBRIDO ACTIVADO ===")
