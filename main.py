@@ -316,52 +316,71 @@ lazo_cerrado = LazoCerrado()
 # ============================================================
 
 def connect_wifi():
-    wlan = network.WLAN(network.STA_IF)
+    """Conecta a WiFi de forma robusta. Nunca crashea: si todo falla,
+    retorna False y el ESP32 sigue operando en modo local.
+    """
     try:
-        wlan.active(False)
-        time.sleep(1)
-    except Exception:
-        pass
-    gc.collect()
-    try:
-        wlan.active(True)
-        time.sleep(0.5)
+        wlan = network.WLAN(network.STA_IF)
     except Exception as e:
-        print("[WiFi] active error: {}".format(e))
-        time.sleep(2)
-    if wlan.isconnected():
-        print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
-        return True
+        print("[WiFi] No se pudo crear WLAN: {}".format(e))
+        return False
 
-    delays = [2, 3, 5, 5, 5]
-    for intento in range(5):
+    try:
+        # Paso 1: apagar interfaz y liberar memoria del driver
         try:
             wlan.active(False)
-            time.sleep(1)
-            gc.collect()
-            wlan.active(True)
-            time.sleep(1)
         except Exception:
             pass
-        try:
-            print("[WiFi] Intento {} de 5 - '{}'...".format(intento + 1, WIFI_SSID))
-            wlan.connect(WIFI_SSID, WIFI_PASS)
-            timeout = 12
-            while not wlan.isconnected() and timeout > 0:
-                time.sleep(1)
-                timeout -= 1
-            if wlan.isconnected():
-                config = wlan.ifconfig()
-                print("[WiFi] OK IP: {}".format(config[0]))
-                return True
-            else:
-                print("[WiFi] Intento {} timeout".format(intento + 1))
-        except Exception as e:
-            print("[WiFi] Intento {} error: {}".format(intento + 1, e))
-        time.sleep(delays[intento])
+        time.sleep(1)
+        gc.collect()
 
-    print("[WiFi] FAIL despues de 5 intentos")
-    return False
+        # Paso 2: encender interfaz
+        try:
+            wlan.active(True)
+            time.sleep(0.5)
+        except Exception as e:
+            print("[WiFi] active() error: {}".format(e))
+            time.sleep(2)
+
+        if wlan.isconnected():
+            print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
+            return True
+
+        # Paso 3: reintentar conectando hasta 5 veces
+        delays = [2, 3, 5, 5, 5]
+        for intento in range(5):
+            try:
+                wlan.active(False)
+                time.sleep(1)
+                gc.collect()
+                wlan.active(True)
+                time.sleep(1)
+            except Exception:
+                pass
+            try:
+                print("[WiFi] Intento {} de 5 - '{}'...".format(intento + 1, WIFI_SSID))
+                wlan.connect(WIFI_SSID, WIFI_PASS)
+                timeout = 12
+                while not wlan.isconnected() and timeout > 0:
+                    time.sleep(1)
+                    timeout -= 1
+                if wlan.isconnected():
+                    config = wlan.ifconfig()
+                    print("[WiFi] OK IP: {}".format(config[0]))
+                    return True
+                else:
+                    print("[WiFi] Intento {} timeout".format(intento + 1))
+            except Exception as e:
+                print("[WiFi] Intento {} error: {}".format(intento + 1, e))
+            time.sleep(delays[intento])
+
+        print("[WiFi] FAIL despues de 5 intentos")
+        return False
+
+    except Exception as e:
+        # Captura cualquier RuntimeError 0x0101 u otro error del driver
+        print("[WiFi] Error fatal (no fatal): {} - continuando offline".format(e))
+        return False
 
 # ============================================================
 # PIN MAP - 4 Macetas via MUX CD74HC4067
@@ -1105,8 +1124,12 @@ def evaluar_alertas(datos, maceta_num=None):
 # MAIN
 # ============================================================
 
-# Conectar WiFi primero
-wifi_ok = connect_wifi()
+# Conectar WiFi primero (no fatal si falla, el ESP32 sigue operando)
+try:
+    wifi_ok = connect_wifi()
+except Exception as e:
+    print("[BOOT] WiFi fallo no-fatal: {}".format(e))
+    wifi_ok = False
 
 if oled:
     oled.fill(0)
