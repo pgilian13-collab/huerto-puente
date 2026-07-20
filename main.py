@@ -316,27 +316,48 @@ lazo_cerrado = LazoCerrado()
 # ============================================================
 
 def connect_wifi():
+    """Conecta a WiFi con manejo robusto de errores.
+
+    En Wokwi a veces el primer intento falla con error 0x0101.
+    Se reintenta varias veces antes de declarar FAIL.
+    """
     wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
+    try:
+        wlan.active(True)
+    except Exception as e:
+        print("[WiFi] active() error: {}".format(e))
+        time.sleep(1)
+        try:
+            wlan.active(True)
+        except:
+            pass
+
     if wlan.isconnected():
         print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
         return True
-    
-    print("[WiFi] '{}'...".format(WIFI_SSID))
-    wlan.connect(WIFI_SSID, WIFI_PASS)
-    
-    timeout = 15
-    while not wlan.isconnected() and timeout > 0:
-        time.sleep(1)
-        timeout -= 1
-    
-    if wlan.isconnected():
-        config = wlan.ifconfig()
-        print("[WiFi] OK IP: {}".format(config[0]))
-        return True
-    else:
-        print("[WiFi] FAIL")
-        return False
+
+    # Reintentar hasta 3 veces con delay entre intentos
+    for intento in range(3):
+        try:
+            print("[WiFi] Intento {} - '{}'...".format(intento + 1, WIFI_SSID))
+            wlan.connect(WIFI_SSID, WIFI_PASS)
+            timeout = 10
+            while not wlan.isconnected() and timeout > 0:
+                time.sleep(1)
+                timeout -= 1
+            if wlan.isconnected():
+                config = wlan.ifconfig()
+                print("[WiFi] OK IP: {}".format(config[0]))
+                return True
+            else:
+                print("[WiFi] Intento {} timeout".format(intento + 1))
+        except Exception as e:
+            print("[WiFi] Intento {} error: {}".format(intento + 1, e))
+        # Delay entre reintentos
+        time.sleep(2)
+
+    print("[WiFi] FAIL despues de 3 intentos")
+    return False
 
 # ============================================================
 # PIN MAP - 4 Macetas via MUX CD74HC4067
@@ -1175,8 +1196,15 @@ def evaluar_alertas(datos, maceta_num=None):
 # MAIN
 # ============================================================
 
-# Conectar WiFi primero
-wifi_ok = connect_wifi()
+# Inicializar cache de sensores ANTES del WiFi (lectura local, no requiere red)
+init_sensor_cache()
+
+# Conectar WiFi (no fatal si falla, ESP32 sigue corriendo)
+try:
+    wifi_ok = connect_wifi()
+except Exception as e:
+    print("[BOOT] WiFi fallo no-fatal: {}".format(e))
+    wifi_ok = False
 
 if oled:
     oled.fill(0)
