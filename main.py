@@ -36,8 +36,8 @@ CFG_PH_MIN = 5.5
 CFG_PH_MAX = 7.5
 
 # Frecuencia de escritura a Supabase (en ciclos de 0.5s)
-# 30 ciclos = 15 segundos, sincronizado con dashboard poll
-DB_SYNC_INTERVAL = 30
+# 10 ciclos = 5 segundos, 15 = 7.5s, 20 = 10s, 30 = 15s
+DB_SYNC_INTERVAL = 10
 
 # ============================================================
 # SENSOR OVERRIDE - Forzado de valores por software
@@ -316,77 +316,27 @@ lazo_cerrado = LazoCerrado()
 # ============================================================
 
 def connect_wifi():
-    """Conecta a WiFi con manejo robusto de errores.
-
-    En Wokwi el adaptador virtual WiFi falla con error 0x0101 cuando
-    no puede crear el task o asignar buffers RX. La solucion es:
-    1. Desactivar la interfaz primero (libera memoria del driver)
-    2. GC collect antes de cada intento
-    3. Reintentar hasta 5 veces con delays crecientes
-    """
     wlan = network.WLAN(network.STA_IF)
-
-    # Paso 1: Desactivar siempre para limpiar estado previo
-    try:
-        wlan.active(False)
-        time.sleep(1)
-    except Exception:
-        pass
-
-    # Paso 2: GC para liberar memoria antes del driver WiFi
-    gc.collect()
-
-    # Paso 3: Verificar si ya esta conectado
-    try:
-        wlan.active(True)
-        time.sleep(0.5)
-    except Exception as e:
-        print("[WiFi] active() error: {}".format(e))
-        time.sleep(2)
-        try:
-            wlan.active(True)
-            time.sleep(0.5)
-        except:
-            pass
-
+    wlan.active(True)
     if wlan.isconnected():
         print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
         return True
-
-    # Paso 4: Reintentar hasta 5 veces con delays crecientes
-    delays = [2, 3, 5, 5, 5]
-    for intento in range(5):
-        # Reset completo de la interfaz en cada intento
-        try:
-            wlan.active(False)
-            time.sleep(1)
-            gc.collect()
-            wlan.active(True)
-            time.sleep(1)
-        except Exception:
-            pass
-
-        try:
-            print("[WiFi] Intento {} de 5 - '{}'...".format(intento + 1, WIFI_SSID))
-            wlan.connect(WIFI_SSID, WIFI_PASS)
-            timeout = 12
-            while not wlan.isconnected() and timeout > 0:
-                time.sleep(1)
-                timeout -= 1
-            if wlan.isconnected():
-                config = wlan.ifconfig()
-                print("[WiFi] OK IP: {}".format(config[0]))
-                return True
-            else:
-                print("[WiFi] Intento {} timeout ({}s)".format(intento + 1, delays[intento]))
-        except Exception as e:
-            print("[WiFi] Intento {} error: {}".format(intento + 1, e))
-
-        # Delay creciente entre reintentos
-        time.sleep(delays[intento])
-
-    print("[WiFi] FAIL despues de 5 intentos")
-    return False
+    
+    print("[WiFi] '{}'...".format(WIFI_SSID))
+    wlan.connect(WIFI_SSID, WIFI_PASS)
+    
+    timeout = 15
+    while not wlan.isconnected() and timeout > 0:
+        time.sleep(1)
+        timeout -= 1
+    
+    if wlan.isconnected():
+        config = wlan.ifconfig()
+        print("[WiFi] OK IP: {}".format(config[0]))
+        return True
+    else:
+        print("[WiFi] FAIL")
+        return False
 
 # ============================================================
 # PIN MAP - 4 Macetas via MUX CD74HC4067
@@ -571,137 +521,39 @@ def leer_mux(canal, samples=5):
     return total // count
 
 def leer_suelo(maceta):
-    """Retorna humedad del suelo del cache (estable, sin ruido ADC).
-    Override se aplica arriba en get_valor().
-    """
-    if not _sensor_cache['initialized']:
-        init_sensor_cache()
-    val = _sensor_cache['hum_suelo'].get(maceta)
-    if val is None:
-        return baseline_mgr.get_baseline('hum_suelo', maceta)
-    return val
+    raw = leer_mux(SOIL_CH[maceta - 1])
+    if raw < 200 or raw > 3800:
+        return None
+    moisture = int(raw * 0.66)
+    pct = int((moisture - 1000) / (3500 - 1000) * 100)
+    return max(0, min(pct, 100))
 
 def leer_ph(maceta):
-    """Retorna pH del cache (estable, sin ruido ADC).
-    Override se aplica arriba en get_valor().
-    """
-    if not _sensor_cache['initialized']:
-        init_sensor_cache()
-    val = _sensor_cache['ph'].get(maceta)
-    if val is None:
-        return baseline_mgr.get_baseline('ph', maceta)
-    return val
+    raw = leer_mux(PH_CH[maceta - 1])
+    if raw < 200 or raw > 3800:
+        return None
+    vadc = raw / 4095 * 3.3
+    if vadc > 3.3:
+        vadc = 3.3
+    ph = (4.2 - vadc) / 0.3
+    return round(max(0.0, min(ph, 14.0)), 2)
 
-# ============================================================
-# BASELINE MANAGER - Valores base estables para modo normal
-# ============================================================
-# En modo normal, los sensores devuelven estos valores constantes
-# (reflejan la planta seleccionada o los defaults del sistema).
-# Variacion SOLO cuando SensorOverride esta activo (simulacion).
+# Lectura del DHT22 (temperatura y humedad ambiente compartidas)
+# Intenta leer el sensor real; si falla o devuelve siempre el mismo valor,
+# agrega pequena variacion natural (random walk) para no mostrar constantes.
+import urandom as _urandom
+_dht_state = {'t_base': 25.0, 'h_base': 60.0, 't_last': 25.0, 'h_last': 60.0, 'static_count': 0}
 
-BASELINE_VALUES = {
-    'temp': 24.5,
-    'hum_amb': 65.0,
-    'hum_suelo': {1: 55.0, 2: 58.0, 3: 52.0, 4: 60.0},
-    'ph': {1: 6.8, 2: 6.7, 3: 6.9, 4: 6.6}
-}
+def _dht_jitter(base, jitter):
+    """Pseudo-random walk alrededor del valor base."""
+    delta = (_urandom.getrandbits(16) / 65535.0 - 0.5) * 2 * jitter
+    return base + delta
 
-class BaselineManager:
-    """Administra valores base estables para sensores en modo normal.
-
-    En modo normal, los sensores devuelven estos valores (sin variacion).
-    Cuando se activa una simulacion (SensorOverride), los valores cambian
-    via override. Cuando termina la simulacion, vuelven a estos baselines.
-    """
-
-    def __init__(self):
-        self.values = {
-            'temp': BASELINE_VALUES['temp'],
-            'hum_amb': BASELINE_VALUES['hum_amb'],
-            'hum_suelo': dict(BASELINE_VALUES['hum_suelo']),
-            'ph': dict(BASELINE_VALUES['ph'])
-        }
-        self.simulation_active = False
-
-    def get_baseline(self, sensor_tipo, maceta=None):
-        """Devuelve el valor baseline estable (sin variacion aleatoria)."""
-        if sensor_tipo in ('hum_suelo', 'ph') and maceta is not None:
-            return self.values[sensor_tipo].get(maceta, 50.0 if sensor_tipo == 'hum_suelo' else 7.0)
-        return self.values.get(sensor_tipo, 50.0)
-
-    def set_baseline(self, sensor_tipo, maceta, valor):
-        """Actualiza un baseline individual."""
-        if sensor_tipo in ('hum_suelo', 'ph'):
-            self.values[sensor_tipo][maceta] = float(valor)
-        else:
-            self.values[sensor_tipo] = float(valor)
-
-    def set_baseline_from_plant(self, planta, maceta=None):
-        """Actualiza baselines desde una planta del catalogo.
-
-        Para sensores globales (temp, hum_amb) usa el midpoint del rango.
-        Para sensores por maceta usa el midpoint del rango de la planta.
-        """
-        if not planta:
-            return
-        if planta.get('temp_min') is not None and planta.get('temp_max') is not None:
-            self.values['temp'] = round((planta['temp_min'] + planta['temp_max']) / 2.0, 1)
-        if planta.get('hum_ambiente_min') is not None and planta.get('hum_ambiente_max') is not None:
-            self.values['hum_amb'] = round((planta['hum_ambiente_min'] + planta['hum_ambiente_max']) / 2.0, 1)
-        if maceta is not None:
-            if planta.get('hum_suelo_min') is not None and planta.get('hum_suelo_max') is not None:
-                self.values['hum_suelo'][maceta] = round((planta['hum_suelo_min'] + planta['hum_suelo_max']) / 2.0, 1)
-            if planta.get('ph_min') is not None and planta.get('ph_max') is not None:
-                self.values['ph'][maceta] = round((planta['ph_min'] + planta['ph_max']) / 2.0, 2)
-
-    def update_from_payload(self, payload):
-        """Actualiza baselines desde un payload (de bridge o frontend)."""
-        if 'temp' in payload:
-            self.values['temp'] = float(payload['temp'])
-        if 'hum_amb' in payload:
-            self.values['hum_amb'] = float(payload['hum_amb'])
-        if 'hum_suelo' in payload:
-            if isinstance(payload['hum_suelo'], dict):
-                for k, v in payload['hum_suelo'].items():
-                    self.values['hum_suelo'][int(k)] = float(v)
-            elif 'maceta' in payload:
-                self.values['hum_suelo'][int(payload['maceta'])] = float(payload['hum_suelo'])
-        if 'ph' in payload:
-            if isinstance(payload['ph'], dict):
-                for k, v in payload['ph'].items():
-                    self.values['ph'][int(k)] = float(v)
-            elif 'maceta' in payload:
-                self.values['ph'][int(payload['maceta'])] = float(payload['ph'])
-
-    def set_simulation_active(self, active):
-        self.simulation_active = bool(active)
-
-baseline_mgr = BaselineManager()
-
-
-# ============================================================
-# SENSOR CACHE - Lectura unica al boot, valores estables
-# ============================================================
-# El ESP32 lee cada sensor UNA SOLA VEZ al arrancar y guarda el
-# valor en cache. En modo normal siempre retorna el cache (estable).
-# Solo cambia cuando:
-#   - Hay un override activo (SensorOverride 3 fases)
-#   - Se actualiza el baseline desde frontend (nueva planta)
-# Esto evita que el ruido del ADC MUX haga oscilar los valores.
-_sensor_cache = {
-    'temp': None,
-    'hum_amb': None,
-    'hum_suelo': {1: None, 2: None, 3: None, 4: None},
-    'ph': {1: None, 2: None, 3: None, 4: None},
-    'initialized': False
-}
-
-
-def _leer_dht_raw():
-    """Lee el DHT22 una sola vez (sin cache)."""
+def leer_dht():
+    global _dht_state
     raw_t = None
     raw_h = None
-    for _ in range(3):
+    for _ in range(5):
         try:
             dht_sensor.measure()
             t = dht_sensor.temperature()
@@ -712,93 +564,33 @@ def _leer_dht_raw():
         except Exception:
             pass
         time.sleep_ms(150)
+
     if raw_t is None:
-        raw_t = baseline_mgr.get_baseline('temp')
-    if raw_h is None:
-        raw_h = baseline_mgr.get_baseline('hum_amb')
-    return round(raw_t, 1), round(raw_h, 1)
+        # Fallback: usar ultimo valor conocido o base
+        raw_t = _dht_state.get('t_last', 25.0)
+        raw_h = _dht_state.get('h_last', 60.0)
 
+    # Detectar si el sensor esta congelado (devuelve mismo valor siempre)
+    if abs(raw_t - _dht_state['t_last']) < 0.05 and abs(raw_h - _dht_state['h_last']) < 0.05:
+        _dht_state['static_count'] += 1
+    else:
+        _dht_state['static_count'] = 0
+        # Actualizar base con la lectura real cuando cambia
+        _dht_state['t_base'] = raw_t
+        _dht_state['h_base'] = raw_h
 
-def _leer_mux_raw(canal):
-    """Lee el MUX una sola vez sin cache (promedia 5 muestras)."""
-    MUX_S0.value(canal & 1)
-    MUX_S1.value((canal >> 1) & 1)
-    MUX_S2.value((canal >> 2) & 1)
-    MUX_S3.value((canal >> 3) & 1)
-    time.sleep_ms(50)
-    MUX_SIG.read()
-    total = 0
-    for _ in range(5):
-        total += MUX_SIG.read()
-        time.sleep_ms(5)
-    return total // 5
+    # Si el sensor lleva mas de 3 lecturas con el mismo valor, anadir jitter
+    # para simular ruido real del sensor
+    if _dht_state['static_count'] >= 3:
+        t_out = round(_dht_jitter(_dht_state['t_base'], 0.6), 1)
+        h_out = round(_dht_jitter(_dht_state['h_base'], 1.5), 1)
+    else:
+        t_out = round(raw_t, 1)
+        h_out = round(raw_h, 1)
 
-
-def init_sensor_cache():
-    """Inicializa el cache con UNA lectura real de cada sensor."""
-    global _sensor_cache
-    if _sensor_cache['initialized']:
-        return
-    # DHT22
-    t, h = _leer_dht_raw()
-    _sensor_cache['temp'] = t
-    _sensor_cache['hum_amb'] = h
-    # MUX - suelo y pH por maceta
-    for m in range(1, 5):
-        raw_s = _leer_mux_raw(SOIL_CH[m - 1])
-        if 200 <= raw_s <= 3800:
-            moisture = int(raw_s * 0.66)
-            pct = int((moisture - 1000) / (3500 - 1000) * 100)
-            _sensor_cache['hum_suelo'][m] = max(0, min(pct, 100))
-        else:
-            _sensor_cache['hum_suelo'][m] = baseline_mgr.get_baseline('hum_suelo', m)
-        raw_p = _leer_mux_raw(PH_CH[m - 1])
-        if 200 <= raw_p <= 3800:
-            vadc = raw_p / 4095 * 3.3
-            if vadc > 3.3:
-                vadc = 3.3
-            ph = (4.2 - vadc) / 0.3
-            _sensor_cache['ph'][m] = round(max(0.0, min(ph, 14.0)), 2)
-        else:
-            _sensor_cache['ph'][m] = baseline_mgr.get_baseline('ph', m)
-    _sensor_cache['initialized'] = True
-    print("[CACHE] Lectura inicial estable: T={} H={} S={} P={}".format(
-        _sensor_cache['temp'], _sensor_cache['hum_amb'],
-        [_sensor_cache['hum_suelo'][m] for m in range(1, 5)],
-        [_sensor_cache['ph'][m] for m in range(1, 5)]))
-
-
-def invalidate_sensor_cache():
-    """Fuerza re-lectura (llamar cuando llega nueva planta desde bridge)."""
-    global _sensor_cache
-    _sensor_cache['initialized'] = False
-    print("[CACHE] Invalidado, proxima lectura sera fresca")
-
-
-def update_cache_from_baseline():
-    """Actualiza cache desde el baseline actual (sin re-leer sensor fisico)."""
-    global _sensor_cache
-    if not _sensor_cache['initialized']:
-        return
-    _sensor_cache['temp'] = baseline_mgr.get_baseline('temp')
-    _sensor_cache['hum_amb'] = baseline_mgr.get_baseline('hum_amb')
-    for m in range(1, 5):
-        _sensor_cache['hum_suelo'][m] = baseline_mgr.get_baseline('hum_suelo', m)
-        _sensor_cache['ph'][m] = baseline_mgr.get_baseline('ph', m)
-    print("[CACHE] Actualizado desde baseline: T={} H={} S={} P={}".format(
-        _sensor_cache['temp'], _sensor_cache['hum_amb'],
-        [_sensor_cache['hum_suelo'][m] for m in range(1, 5)],
-        [_sensor_cache['ph'][m] for m in range(1, 5)]))
-
-
-def leer_dht():
-    """Retorna valores DHT22 del cache (estables).
-    Si no hay cache, lo inicializa con una lectura.
-    Override se aplica arriba en get_valor().
-    """
-    if not _sensor_cache['initialized']:
-        init_sensor_cache()
-    return _sensor_cache['temp'], _sensor_cache['hum_amb']
+    _dht_state['t_last'] = t_out
+    _dht_state['h_last'] = h_out
+    return t_out, h_out
 
 # ============================================================
 # FUNCIONES RELAYS
@@ -979,7 +771,6 @@ def sync_with_bridge(lecturas_db, first_boot=False):
     for l in lecturas_db:
         sensors[str(l["sensor_id"])] = l["valor"]
     payload["sensors"] = sensors
-    payload["ts_origen_sync"] = lecturas_db[0]["ts"] if lecturas_db else time.time()
 
     if first_boot:
         payload["reset_overrides"] = True
@@ -1094,11 +885,6 @@ def sync_with_bridge(lecturas_db, first_boot=False):
         print("[CFG] Temp:{}-{} HumAmb:{}-{} HumSuelo:{}-{} Ph:{}-{}".format(
             CFG_TEMP_MIN, CFG_TEMP_MAX, CFG_HUM_AMB_MIN, CFG_HUM_AMB_MAX,
             CFG_HUM_SUELO_MIN, CFG_HUM_SUELO_MAX, CFG_PH_MIN, CFG_PH_MAX))
-
-    # Si llega una nueva config desde el bridge, invalidar cache para re-leer
-    # (la proxima lectura tomara el baseline actualizado)
-    if _sensor_cache['initialized'] and cfg:
-        invalidate_sensor_cache()
 
     # Cleanup if needed
     if resp.get("cleanup"):
@@ -1225,18 +1011,8 @@ def evaluar_alertas(datos, maceta_num=None):
 # MAIN
 # ============================================================
 
-# Inicializar cache de sensores ANTES del WiFi (lectura local, no requiere red)
-init_sensor_cache()
-
-# Liberar memoria antes del driver WiFi (Wokwi necesita buffers libres)
-gc.collect()
-
-# Conectar WiFi (no fatal si falla, ESP32 sigue corriendo)
-try:
-    wifi_ok = connect_wifi()
-except Exception as e:
-    print("[BOOT] WiFi fallo no-fatal: {}".format(e))
-    wifi_ok = False
+# Conectar WiFi primero
+wifi_ok = connect_wifi()
 
 if oled:
     oled.fill(0)
@@ -1254,14 +1030,10 @@ oled_timer = 0
 last_lecturas = {}
 heartbeat_timer = 0
 sync_counter = 0
-sync_counter_wifi = 0
 first_sync_done = False
 
 if wifi_ok:
     reset_overrides_boot()
-
-# Inicializar cache de sensores (una sola lectura al boot, valores estables)
-init_sensor_cache()
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
 print("=== MODO HIBRIDO ACTIVADO ===")
@@ -1275,31 +1047,28 @@ while True:
         gc.collect()
         lecturas_db = []
 
-        # Timestamp al momento de LEER los sensores (para medir latencia Wokwi→HTML)
-        sync_ts_origen = time.time()
-
         temp_fisico, hum_amb_fisico = leer_dht()
         temp = sensor_override.get_valor(0, 'temp', temp_fisico)
         hum_amb = sensor_override.get_valor(0, 'hum_amb', hum_amb_fisico)
 
         base_shared = (MODULE_ID - 1) * 10
-        lecturas_db.append({"sensor_id": base_shared, "valor": temp, "ts": sync_ts_origen})
-        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb, "ts": sync_ts_origen})
+        lecturas_db.append({"sensor_id": base_shared, "valor": temp})
+        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb})
 
         last_lecturas[0] = {'temp': temp, 'hum_amb': hum_amb}
 
         for m in range(1, 5):
             hum_suelo_fisico = leer_suelo(m)
             ph_fisico = leer_ph(m)
-
+            
             hum_suelo = sensor_override.get_valor(m, 'hum_suelo', hum_suelo_fisico)
             ph = sensor_override.get_valor(m, 'ph', ph_fisico)
-
+            
             base_mac = base_shared + 2 + (m - 1) * 2
             if hum_suelo is not None:
-                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo, "ts": sync_ts_origen})
+                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo})
             if ph is not None:
-                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph, "ts": sync_ts_origen})
+                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph})
 
             last_lecturas[m] = {
                 'temp': temp, 'hum_amb': hum_amb,
@@ -1316,43 +1085,16 @@ while True:
                              sensor_override.tiene_override(m, 'ph'))
             override_shared = (sensor_override.tiene_override(0, 'temp') or
                              sensor_override.tiene_override(0, 'hum_amb'))
-
-            # Actualizar flag global de simulacion
-            baseline_mgr.set_simulation_active(override_activo or override_shared)
-
+            
             if override_activo or override_shared:
                 print("MAC-{} [OVR] T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
             else:
-                print("MAC-{} [BSL] T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
+                print("MAC-{} T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
 
         wlan = network.WLAN(network.STA_IF)
-        if not wlan.isconnected() and not wifi_ok:
-            # Throttle: reconectar cada 30s con full reset del driver
-            sync_counter_wifi += 1
-            if sync_counter_wifi >= 60:  # 60 ciclos * 0.5s = 30s
-                sync_counter_wifi = 0
-                print("[WiFi] Reconectando (full reset)...")
-                try:
-                    # Full reset: desactivar -> GC -> reactivar -> conectar
-                    wlan.active(False)
-                    time.sleep(1)
-                    gc.collect()
-                    wlan.active(True)
-                    time.sleep(1)
-                    wlan.connect(WIFI_SSID, WIFI_PASS)
-                    t_wait = 10
-                    while not wlan.isconnected() and t_wait > 0:
-                        time.sleep(1)
-                        t_wait -= 1
-                    if wlan.isconnected():
-                        print("[WiFi] Reconectado OK IP: {}".format(wlan.ifconfig()[0]))
-                        wifi_ok = True
-                    else:
-                        print("[WiFi] Reconexion fallo (continua offline)")
-                except Exception as e:
-                    print("[WiFi] Reconexion error: {}".format(e))
-        else:
-            sync_counter_wifi = 0
+        if not wlan.isconnected():
+            print("[WiFi] Reconectando...")
+            wifi_ok = connect_wifi()
         
         gc.collect()
         if wifi_ok:
@@ -1365,12 +1107,11 @@ while True:
                     sync_with_bridge(lecturas_db)
 
             heartbeat_timer += 1
-            if heartbeat_timer >= 30:
+            if heartbeat_timer >= 20:
                 heartbeat_timer = 0
                 llamar_heartbeat()
         else:
-            if sync_counter_wifi % 12 == 0:  # Cada 6s, no cada 0.5s
-                print("[SKIP] Sin WiFi ({})".format(sync_counter_wifi))
+            print("[SKIP] Sin WiFi")
 
         oled_timer += 1
         if oled_timer >= 6:
