@@ -1222,6 +1222,7 @@ oled_timer = 0
 last_lecturas = {}
 heartbeat_timer = 0
 sync_counter = 0
+sync_counter_wifi = 0
 first_sync_done = False
 
 if wifi_ok:
@@ -1293,9 +1294,28 @@ while True:
                 print("MAC-{} [BSL] T:{} H:{} S:{} P:{}".format(m, temp, hum_amb, hum_suelo, ph))
 
         wlan = network.WLAN(network.STA_IF)
-        if not wlan.isconnected():
-            print("[WiFi] Reconectando...")
-            wifi_ok = connect_wifi()
+        if not wlan.isconnected() and not wifi_ok:
+            # Throttle: solo intentar reconectar cada 30s
+            sync_counter_wifi += 1
+            if sync_counter_wifi >= 60:  # 60 ciclos * 0.5s = 30s
+                sync_counter_wifi = 0
+                print("[WiFi] Reconectando...")
+                try:
+                    # No llamar connect_wifi() directo porque re-crea el task
+                    wlan.connect(WIFI_SSID, WIFI_PASS)
+                    t_wait = 8
+                    while not wlan.isconnected() and t_wait > 0:
+                        time.sleep(1)
+                        t_wait -= 1
+                    if wlan.isconnected():
+                        print("[WiFi] Reconectado OK")
+                        wifi_ok = True
+                    else:
+                        print("[WiFi] Reconexion fallo (continua offline)")
+                except Exception as e:
+                    print("[WiFi] Reconexion error: {}".format(e))
+        else:
+            sync_counter_wifi = 0
         
         gc.collect()
         if wifi_ok:
