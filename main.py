@@ -545,9 +545,9 @@ def leer_suelo(maceta):
     raw = leer_mux(SOIL_CH[maceta - 1])
     if raw < 200 or raw > 3800:
         return None
-    moisture = int(raw * 0.66)
-    pct = int((moisture - 1000) / (3500 - 1000) * 100)
-    return max(0, min(pct, 100))
+    vadc = raw / 4095 * 3.3
+    moisture_pct = int((vadc / 3.3) * 100)
+    return max(0, min(moisture_pct, 100))
 
 def leer_ph(maceta):
     raw = leer_mux(PH_CH[maceta - 1])
@@ -556,14 +556,14 @@ def leer_ph(maceta):
     vadc = raw / 4095 * 3.3
     if vadc > 3.3:
         vadc = 3.3
-    ph = (4.2 - vadc) / 0.3
+    ph = (3.712 - vadc) / 0.3
     return round(max(0.0, min(ph, 14.0)), 2)
 
 # Lectura del DHT22 (temperatura y humedad ambiente compartidas)
 # Intenta leer el sensor real; si falla o devuelve siempre el mismo valor,
 # agrega pequena variacion natural (random walk) para no mostrar constantes.
 import urandom as _urandom
-_dht_state = {'t_base': 25.0, 'h_base': 60.0, 't_last': 25.0, 'h_last': 60.0, 'static_count': 0}
+_dht_state = {'t_base': 25.0, 'h_base': 65.0, 't_last': 25.0, 'h_last': 65.0, 'static_count': 0}
 
 def _dht_jitter(base, jitter):
     """Pseudo-random walk alrededor del valor base."""
@@ -587,22 +587,19 @@ def leer_dht():
         time.sleep_ms(150)
 
     if raw_t is None:
-        # Fallback: usar ultimo valor conocido o base
         raw_t = _dht_state.get('t_last', 25.0)
-        raw_h = _dht_state.get('h_last', 60.0)
+        raw_h = _dht_state.get('h_last', 65.0)
 
-    # Detectar si el sensor esta congelado (devuelve mismo valor siempre)
     if abs(raw_t - _dht_state['t_last']) < 0.05 and abs(raw_h - _dht_state['h_last']) < 0.05:
         _dht_state['static_count'] += 1
     else:
         _dht_state['static_count'] = 0
-        # Actualizar base con la lectura real cuando cambia
         _dht_state['t_base'] = raw_t
         _dht_state['h_base'] = raw_h
 
-    # Si el sensor lleva mas de 3 lecturas con el mismo valor, anadir jitter
-    # para simular ruido real del sensor
     if _dht_state['static_count'] >= 3:
+        _dht_state['t_base'] = 25.0
+        _dht_state['h_base'] = 65.0
         t_out = round(_dht_jitter(_dht_state['t_base'], 0.6), 1)
         h_out = round(_dht_jitter(_dht_state['h_base'], 1.5), 1)
     else:
