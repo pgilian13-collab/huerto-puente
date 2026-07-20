@@ -318,17 +318,34 @@ lazo_cerrado = LazoCerrado()
 def connect_wifi():
     """Conecta a WiFi con manejo robusto de errores.
 
-    En Wokwi a veces el primer intento falla con error 0x0101.
-    Se reintenta varias veces antes de declarar FAIL.
+    En Wokwi el adaptador virtual WiFi falla con error 0x0101 cuando
+    no puede crear el task o asignar buffers RX. La solucion es:
+    1. Desactivar la interfaz primero (libera memoria del driver)
+    2. GC collect antes de cada intento
+    3. Reintentar hasta 5 veces con delays crecientes
     """
     wlan = network.WLAN(network.STA_IF)
+
+    # Paso 1: Desactivar siempre para limpiar estado previo
+    try:
+        wlan.active(False)
+        time.sleep(1)
+    except Exception:
+        pass
+
+    # Paso 2: GC para liberar memoria antes del driver WiFi
+    gc.collect()
+
+    # Paso 3: Verificar si ya esta conectado
     try:
         wlan.active(True)
+        time.sleep(0.5)
     except Exception as e:
         print("[WiFi] active() error: {}".format(e))
-        time.sleep(1)
+        time.sleep(2)
         try:
             wlan.active(True)
+            time.sleep(0.5)
         except:
             pass
 
@@ -336,12 +353,23 @@ def connect_wifi():
         print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
         return True
 
-    # Reintentar hasta 3 veces con delay entre intentos
-    for intento in range(3):
+    # Paso 4: Reintentar hasta 5 veces con delays crecientes
+    delays = [2, 3, 5, 5, 5]
+    for intento in range(5):
+        # Reset completo de la interfaz en cada intento
         try:
-            print("[WiFi] Intento {} - '{}'...".format(intento + 1, WIFI_SSID))
+            wlan.active(False)
+            time.sleep(1)
+            gc.collect()
+            wlan.active(True)
+            time.sleep(1)
+        except Exception:
+            pass
+
+        try:
+            print("[WiFi] Intento {} de 5 - '{}'...".format(intento + 1, WIFI_SSID))
             wlan.connect(WIFI_SSID, WIFI_PASS)
-            timeout = 10
+            timeout = 12
             while not wlan.isconnected() and timeout > 0:
                 time.sleep(1)
                 timeout -= 1
@@ -350,13 +378,14 @@ def connect_wifi():
                 print("[WiFi] OK IP: {}".format(config[0]))
                 return True
             else:
-                print("[WiFi] Intento {} timeout".format(intento + 1))
+                print("[WiFi] Intento {} timeout ({}s)".format(intento + 1, delays[intento]))
         except Exception as e:
             print("[WiFi] Intento {} error: {}".format(intento + 1, e))
-        # Delay entre reintentos
-        time.sleep(2)
 
-    print("[WiFi] FAIL despues de 3 intentos")
+        # Delay creciente entre reintentos
+        time.sleep(delays[intento])
+
+    print("[WiFi] FAIL despues de 5 intentos")
     return False
 
 # ============================================================
@@ -1199,6 +1228,9 @@ def evaluar_alertas(datos, maceta_num=None):
 # Inicializar cache de sensores ANTES del WiFi (lectura local, no requiere red)
 init_sensor_cache()
 
+# Liberar memoria antes del driver WiFi (Wokwi necesita buffers libres)
+gc.collect()
+
 # Conectar WiFi (no fatal si falla, ESP32 sigue corriendo)
 try:
     wifi_ok = connect_wifi()
@@ -1295,20 +1327,25 @@ while True:
 
         wlan = network.WLAN(network.STA_IF)
         if not wlan.isconnected() and not wifi_ok:
-            # Throttle: solo intentar reconectar cada 30s
+            # Throttle: reconectar cada 30s con full reset del driver
             sync_counter_wifi += 1
             if sync_counter_wifi >= 60:  # 60 ciclos * 0.5s = 30s
                 sync_counter_wifi = 0
-                print("[WiFi] Reconectando...")
+                print("[WiFi] Reconectando (full reset)...")
                 try:
-                    # No llamar connect_wifi() directo porque re-crea el task
+                    # Full reset: desactivar -> GC -> reactivar -> conectar
+                    wlan.active(False)
+                    time.sleep(1)
+                    gc.collect()
+                    wlan.active(True)
+                    time.sleep(1)
                     wlan.connect(WIFI_SSID, WIFI_PASS)
-                    t_wait = 8
+                    t_wait = 10
                     while not wlan.isconnected() and t_wait > 0:
                         time.sleep(1)
                         t_wait -= 1
                     if wlan.isconnected():
-                        print("[WiFi] Reconectado OK")
+                        print("[WiFi] Reconectado OK IP: {}".format(wlan.ifconfig()[0]))
                         wifi_ok = True
                     else:
                         print("[WiFi] Reconexion fallo (continua offline)")
@@ -1332,7 +1369,8 @@ while True:
                 heartbeat_timer = 0
                 llamar_heartbeat()
         else:
-            print("[SKIP] Sin WiFi")
+            if sync_counter_wifi % 12 == 0:  # Cada 6s, no cada 0.5s
+                print("[SKIP] Sin WiFi ({})".format(sync_counter_wifi))
 
         oled_timer += 1
         if oled_timer >= 6:
