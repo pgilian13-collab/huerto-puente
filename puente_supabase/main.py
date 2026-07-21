@@ -1473,6 +1473,8 @@ async def get_trefle_details(slug: str):
 async def import_plant(data: dict):
     """Importa una planta desde Perenual/Trefle al catalogo_plantas.
 
+    Si ya existe (mismo nombre), actualiza los datos en lugar de fallar.
+
     Body: {
         nombre, perenual_id?, trefle_slug?,
         temp: {min, max}, humSuelo: {min, max}, humAmb: {min, max}, ph: {min, max},
@@ -1483,14 +1485,6 @@ async def import_plant(data: dict):
     nombre = data.get("nombre", "").strip()
     if not nombre:
         raise HTTPException(400, "nombre requerido")
-    # Check duplicate
-    existing = await client.get(
-        f"{SUPABASE_URL}/rest/v1/catalogo_plantas",
-        params={"nombre": f"eq.{nombre}", "limit": "1"},
-        headers=HEADERS_SERVICE,
-    )
-    if existing.status_code == 200 and existing.json():
-        raise HTTPException(409, f"Planta '{nombre}' ya existe en el catalogo")
     payload = {
         "nombre": nombre,
         "temp_min": data.get("temp", {}).get("min", 15),
@@ -1514,6 +1508,20 @@ async def import_plant(data: dict):
         "description": data.get("description"),
         "source_api": "perenual" if data.get("perenual_id") else ("trefle" if data.get("trefle_slug") else "manual"),
     }
+    # Check duplicate -> UPSERT
+    existing = await client.get(
+        f"{SUPABASE_URL}/rest/v1/catalogo_plantas",
+        params={"nombre": f"eq.{nombre}", "limit": "1"},
+        headers=HEADERS_SERVICE,
+    )
+    if existing.status_code == 200 and existing.json():
+        row_id = existing.json()[0]["id"]
+        await client.patch(
+            f"{SUPABASE_URL}/rest/v1/catalogo_plantas?id=eq.{row_id}",
+            json=payload,
+            headers={**HEADERS_SERVICE, "Prefer": "return=minimal"},
+        )
+        return {"ok": True, "updated": True, "planta_id": row_id, "nombre": nombre}
     resp = await client.post(
         f"{SUPABASE_URL}/rest/v1/catalogo_plantas",
         json=payload,
@@ -1521,7 +1529,7 @@ async def import_plant(data: dict):
     )
     if resp.status_code in (200, 201):
         rows = resp.json()
-        return {"ok": True, "planta": rows[0] if rows else payload}
+        return {"ok": True, "updated": False, "planta": rows[0] if rows else payload}
     raise HTTPException(500, f"Error insertando: {resp.status_code} {resp.text[:200]}")
 
 
