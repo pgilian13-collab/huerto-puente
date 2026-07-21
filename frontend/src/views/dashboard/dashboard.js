@@ -469,12 +469,20 @@ var DashboardModule = (function() {
     }
 
     function _setActuatorVisual(name, on) {
+        // Card completa: clase active-loop cuando el lazo cerrado lo activa
+        var card = document.getElementById('act-' + name);
+        if (card) card.classList.toggle('active-loop', on);
         // LED indicator (siempre refleja el estado del lazo cerrado)
         var led = document.getElementById(name + '-led');
         if (led) led.classList.toggle('active', on);
-        // Barra de estado
+        // Barra de estado con stripes animados
         var bar = document.getElementById(name + '-bar');
-        if (bar) bar.style.width = on ? '100%' : '0%';
+        if (bar) {
+            bar.style.width = on ? '100%' : '0%';
+            bar.style.background = on
+                ? 'linear-gradient(90deg, #15803d 0%, #22c55e 50%, #4ade80 100%)'
+                : '#333';
+        }
         // Estado y modo (modo = AUTO cuando se activa por lazo cerrado)
         var state = document.getElementById(name + '-state');
         if (state) state.textContent = on ? 'ON' : 'OFF';
