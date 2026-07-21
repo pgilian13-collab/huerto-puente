@@ -860,17 +860,27 @@ def sync_with_bridge(lecturas_db, first_boot=False):
         alerta_id = alerta.get("id")
         if maceta is not None and sensor_tipo and valor_forzado is not None:
             active_keys.add((maceta, sensor_tipo))
-            if not sensor_override.tiene_override(maceta, sensor_tipo):
+            # Determinar el valor fisico actual del sensor (ultimo leido)
+            valor_fisico = None
+            if last_lecturas.get(maceta):
+                vf = last_lecturas[maceta].get(sensor_tipo)
+                if vf is not None:
+                    valor_fisico = float(vf)
+            # Si no hay lectura fisica previa, usamos el valor forzado como
+            # punto de partida (asi el ciclo arranca sin saltos)
+            if valor_fisico is None:
                 valor_fisico = float(valor_forzado)
-                if last_lecturas.get(maceta):
-                    vf = last_lecturas[maceta].get(sensor_tipo)
-                    if vf is not None:
-                        valor_fisico = float(vf)
-                sensor_override.set_override(
-                    maceta, sensor_tipo, float(valor_forzado), valor_fisico)
-                # Guardar alerta_id para desactivar al terminar el ciclo
-                if alerta_id and (maceta, sensor_tipo) in sensor_override.overrides:
-                    sensor_override.overrides[(maceta, sensor_tipo)]['alerta_id'] = alerta_id
+            # Siempre reiniciar el override con el nuevo valor (incluso si ya
+            # habia uno activo para esa maceta/sensor). Asi el usuario puede
+            # forzar un nuevo valor y el ciclo arranca desde el valor fisico
+            # actual, degradando hacia el nuevo valor critico.
+            sensor_override.set_override(
+                maceta, sensor_tipo, float(valor_forzado), valor_fisico)
+            # Guardar alerta_id para desactivar al terminar el ciclo
+            if alerta_id and (maceta, sensor_tipo) in sensor_override.overrides:
+                sensor_override.overrides[(maceta, sensor_tipo)]['alerta_id'] = alerta_id
+            print("[OVERRIDE-NEW] MAC-{} {} -> {} (desde {})".format(
+                maceta, sensor_tipo, valor_forzado, valor_fisico))
     for key in list(sensor_override.overrides.keys()):
         if key not in active_keys:
             sensor_override._clear_override(key[0], key[1])
