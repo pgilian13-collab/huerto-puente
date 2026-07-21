@@ -29,14 +29,24 @@ var ApiService = (function() {
         var h = headers();
         if (extraHeaders) Object.assign(h, extraHeaders);
         return fetch(url, { method: 'POST', headers: h, body: JSON.stringify(data) })
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .catch(function(e) { console.error('[API] POST error:', e); return null; });
+            .then(function(r) {
+                return r.json().then(function(body) {
+                    if (r.ok) return body;
+                    return { ok: false, status: r.status, detail: (body && body.detail) ? body.detail : (body && body.error) ? body.error : ('HTTP ' + r.status), _raw: body };
+                });
+            })
+            .catch(function(e) { console.error('[API] POST error:', e); return { ok: false, error: e.message }; });
     }
 
     function patch(url, data) {
         return fetch(url, { method: 'PATCH', headers: headers(), body: JSON.stringify(data) })
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .catch(function(e) { console.error('[API] PATCH error:', e); return null; });
+            .then(function(r) {
+                return r.json().then(function(body) {
+                    if (r.ok) return body;
+                    return { ok: false, status: r.status, detail: (body && body.detail) ? body.detail : 'HTTP ' + r.status, _raw: body };
+                });
+            })
+            .catch(function(e) { console.error('[API] PATCH error:', e); return { ok: false, error: e.message }; });
     }
 
     function del(url) {

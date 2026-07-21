@@ -894,7 +894,7 @@ function bindDashPlantSelector() {
             btnImport.innerHTML = '<span class="material-icons-round" style="font-size:16px;animation:spin 1s linear infinite">refresh</span> Importando...';
             ApiService.importPlant(payload).then(function(res) {
                 if (res && res.ok) {
-                    if (window.showToast) showToast('Planta importada correctamente', 'success');
+                    if (window.showToast) window.showToast('Planta importada correctamente', 'success');
                     importPreview.style.display = 'none';
                     if (useApi && ranges) {
                         function setVal(id, v) { var el = document.getElementById(id); if (el) el.value = v; }
@@ -904,9 +904,14 @@ function bindDashPlantSelector() {
                         setVal('cfg-ph-min', ranges.ph.min); setVal('cfg-ph-max', ranges.ph.max);
                     }
                 } else {
-                    var msg = (res && res.detail) ? res.detail : 'Error al importar';
-                    if (window.showToast) showToast(msg, 'error');
+                    var msg = (res && res.detail) ? res.detail : 'Error al importar (sin respuesta)';
+                    console.error('[IMPORT] Error:', res);
+                    if (window.showToast) window.showToast(msg, 'error');
                 }
+                btnImport.innerHTML = '<span class="material-icons-round">file_download</span> Importar y Aplicar';
+            }).catch(function(e) {
+                console.error('[IMPORT] Catch:', e);
+                if (window.showToast) window.showToast('Error de red: ' + e.message, 'error');
                 btnImport.innerHTML = '<span class="material-icons-round">file_download</span> Importar y Aplicar';
             });
         });
