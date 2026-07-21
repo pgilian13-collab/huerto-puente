@@ -72,20 +72,9 @@ var App = (function() {
 
         // 7. Listen for simulation alerts
         EventBus.on('simulation:alert', function(data) {
-            var umbrales = AppState.get('umbrales') || {};
-            var umbralMap = {
-                temp: umbrales.temp,
-                hum_amb: umbrales.humAmb,
-                hum_suelo: umbrales.humSuelo,
-                ph: umbrales.ph
-            };
-            var u = umbralMap[data.sensor];
-            if (u && data.valor >= u.min && data.valor <= u.max) {
-                console.log('[SIM] Valor ' + data.valor + ' dentro de rango seguro [' + u.min + '-' + u.max + ']. Simulacion no aplicada.');
-                showToast('Valor dentro de rango seguro — simulacion no aplicada', 'info');
-                return;
-            }
-
+            // Sin validacion: cualquier valor se envia como override.
+            // El usuario puede forzar cualquier valor (incluso dentro del
+            // rango seguro) para probar el comportamiento del sistema.
             var inv = AppState.get('currentInv') || 0;
             var deviceId = inv + 1;
             var mac = AppState.get('currentMaceta') || 1;
