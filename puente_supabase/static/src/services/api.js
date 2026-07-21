@@ -26,12 +26,14 @@ var ApiService = (function() {
     }
 
     function post(url, data, extraHeaders) {
-        var h = headers();
+        var h = { ...headers(), 'Prefer': 'return=representation' };
         if (extraHeaders) Object.assign(h, extraHeaders);
         return fetch(url, { method: 'POST', headers: h, body: JSON.stringify(data) })
             .then(function(r) {
-                return r.json().then(function(body) {
-                    if (r.ok) return body;
+                return r.text().then(function(text) {
+                    var body = null;
+                    try { body = text ? JSON.parse(text) : null; } catch(e) {}
+                    if (r.ok) return body || { ok: true };
                     return { ok: false, status: r.status, detail: (body && body.detail) ? body.detail : (body && body.error) ? body.error : ('HTTP ' + r.status), _raw: body };
                 });
             })
@@ -39,10 +41,12 @@ var ApiService = (function() {
     }
 
     function patch(url, data) {
-        return fetch(url, { method: 'PATCH', headers: headers(), body: JSON.stringify(data) })
+        return fetch(url, { method: 'PATCH', headers: { ...headers(), 'Prefer': 'return=representation' }, body: JSON.stringify(data) })
             .then(function(r) {
-                return r.json().then(function(body) {
-                    if (r.ok) return body;
+                return r.text().then(function(text) {
+                    var body = null;
+                    try { body = text ? JSON.parse(text) : null; } catch(e) {}
+                    if (r.ok) return body || { ok: true };
                     return { ok: false, status: r.status, detail: (body && body.detail) ? body.detail : 'HTTP ' + r.status, _raw: body };
                 });
             })

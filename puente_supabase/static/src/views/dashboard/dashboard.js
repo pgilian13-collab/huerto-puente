@@ -636,6 +636,7 @@ var DashboardModule = (function() {
     }
 
     function saveConfig() {
+        var btn = document.getElementById('btnSaveConfig');
         var umbrales = {
             temp: { min: val('cfg-temp-min', 15), max: val('cfg-temp-max', 30) },
             humAmb: { min: val('cfg-hum-min', 30), max: val('cfg-hum-max', 85) },
@@ -644,6 +645,11 @@ var DashboardModule = (function() {
         };
         AppState.set('umbrales', umbrales);
         AppState.persistUmbrales();
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-icons-round" style="font-size:16px;animation:spin 1s linear infinite">refresh</span> Guardando...';
+        }
 
         var inv = AppState.get('currentInv') || 0;
         var deviceId = inv + 1;
@@ -657,18 +663,23 @@ var DashboardModule = (function() {
         }).then(function() {
             console.log('[CONFIG] Umbrales guardados en Supabase');
             if (window.showToast) window.showToast('Configuracion guardada correctamente', 'success');
+            if (btn) {
+                btn.innerHTML = '<span class="material-icons-round">check</span> Guardado';
+                btn.style.background = '#16a34a';
+                setTimeout(function() {
+                    btn.innerHTML = '<span class="material-icons-round">save</span> Guardar Configuracion';
+                    btn.style.background = '';
+                    btn.disabled = false;
+                }, 2000);
+            }
         }).catch(function(e) {
             console.error('[CONFIG] Error guardando en Supabase:', e);
-            if (window.showToast) window.showToast('Error al guardar configuracion', 'error');
+            if (window.showToast) window.showToast('Error al guardar: ' + (e.message || e), 'error');
+            if (btn) {
+                btn.innerHTML = '<span class="material-icons-round">save</span> Guardar Configuracion';
+                btn.disabled = false;
+            }
         });
-
-        var btn = document.querySelector('.btn-save');
-        if (btn) {
-            var orig = btn.innerHTML;
-            btn.innerHTML = '<span class="material-icons-round">check</span> Guardado';
-            btn.style.background = '#16a34a';
-            setTimeout(function() { btn.innerHTML = orig; btn.style.background = ''; }, 2000);
-        }
     }
 
     return { init: init, destroy: destroy, loadConfigFromSupabase: loadConfigFromSupabase, setSkeletonActive: setSkeletonActive, initTooltips: initTooltips, getThreshold: getThreshold, updateLatencyBadge: updateLatencyBadge };
