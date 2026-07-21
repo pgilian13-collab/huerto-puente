@@ -656,8 +656,10 @@ var DashboardModule = (function() {
             }
         }).then(function() {
             console.log('[CONFIG] Umbrales guardados en Supabase');
+            if (window.showToast) window.showToast('Configuracion guardada correctamente', 'success');
         }).catch(function(e) {
             console.error('[CONFIG] Error guardando en Supabase:', e);
+            if (window.showToast) window.showToast('Error al guardar configuracion', 'error');
         });
 
         var btn = document.querySelector('.btn-save');
