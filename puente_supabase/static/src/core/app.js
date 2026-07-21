@@ -120,8 +120,10 @@ var App = (function() {
                 console.error('[ACT] Actuador no encontrado:', actuatorName, 'MAC-' + mac);
                 return;
             }
+            // Determinar estado actual desde el visual (label ON/OFF del boton)
             var currentBtn = document.getElementById('btn-' + actuatorName);
-            var isOn = currentBtn && currentBtn.classList.contains('on');
+            var currentLabel = currentBtn ? currentBtn.querySelector('.btn-label') : null;
+            var isOn = currentLabel && currentLabel.textContent.trim() === 'ON';
             var newEstado = isOn ? 'OFF' : 'ON';
 
             // Show PENDIENTE status
@@ -129,16 +131,28 @@ var App = (function() {
             if (modeEl) { modeEl.textContent = 'Esperando...'; modeEl.style.color = '#FFD600'; }
 
             ActuatorService.toggleActuador(act.id, act.nombre, act.pin_conexion, newEstado, deviceId).then(function(res) {
-                if (res && res.success) {
-                    // Show ENVIADO status
-                    if (modeEl) { modeEl.textContent = 'Enviado'; modeEl.style.color = '#00BF'; }
+                // res puede venir como {ok: true, ...} desde el bridge o {success: true} legado
+                var ok = res && (res.ok || res.success);
+                if (ok) {
+                    // Actualizar visual del boton y estado
+                    var btn = document.getElementById('btn-' + actuatorName);
+                    var label = btn ? btn.querySelector('.btn-label') : null;
+                    if (label) label.textContent = newEstado;
+                    var stateEl = document.getElementById(actuatorName + '-state');
+                    if (stateEl) stateEl.textContent = newEstado;
+                    var barEl = document.getElementById(actuatorName + '-bar');
+                    if (barEl) barEl.style.width = (newEstado === 'ON') ? '100%' : '0%';
+                    var ledEl = document.getElementById(actuatorName + '-led');
+                    if (ledEl) ledEl.classList.toggle('active', newEstado === 'ON');
+
+                    if (modeEl) { modeEl.textContent = 'Enviado'; modeEl.style.color = '#22c55e'; }
                     console.log('[ACT] ' + actuatorName + ' -> ' + newEstado);
-                    // Clear after 3s
                     setTimeout(function() {
                         if (modeEl) { modeEl.textContent = 'MANUAL'; modeEl.style.color = ''; }
                     }, 3000);
                 } else {
                     if (modeEl) { modeEl.textContent = 'Error'; modeEl.style.color = '#FF4545'; }
+                    console.error('[ACT] Error toggle', actuatorName, res);
                     setTimeout(function() {
                         if (modeEl) { modeEl.textContent = 'MANUAL'; modeEl.style.color = ''; }
                     }, 3000);
