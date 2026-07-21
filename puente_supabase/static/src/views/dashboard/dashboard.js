@@ -59,12 +59,26 @@ var DashboardModule = (function() {
                 var valTxt = valEl ? (valEl.textContent || '').trim() : '--';
                 var th = getThreshold(info.minKey, info.maxKey, info.defMin, info.defMax);
                 var status = '';
+                var statusLabel = 'NORMAL';
                 if (valTxt && valTxt !== '--' && valTxt !== '-') {
                     var numVal = parseFloat(valTxt);
                     if (!isNaN(numVal)) {
-                        if (numVal < th.min || numVal > th.max) status = 'crit';
-                        else if (numVal < th.min * 1.1 || numVal > th.max * 0.9) status = 'warn';
+                        if (numVal < th.min || numVal > th.max) {
+                            status = 'crit';
+                            statusLabel = (numVal < th.min) ? 'BAJO' : 'ALTO';
+                        } else if (numVal < th.min * 1.1 || numVal > th.max * 0.9) {
+                            status = 'warn';
+                            statusLabel = 'ALERTA';
+                        }
                     }
+                }
+                // Aplicar clase al card y al status badge
+                card.classList.remove('sensor-warn', 'sensor-crit');
+                if (status) card.classList.add('sensor-' + status);
+                var statusEl = document.getElementById(info.valId + 'Status');
+                if (statusEl) {
+                    statusEl.className = 'card-status status-' + (status || 'ok');
+                    statusEl.textContent = statusLabel;
                 }
                 tip.innerHTML =
                     '<div class="sensor-tooltip-row">' +
