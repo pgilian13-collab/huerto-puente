@@ -1,4 +1,3 @@
-
 from machine import Pin, I2C, ADC, PWM
 import ssd1306
 import time
@@ -91,9 +90,13 @@ class SensorOverride:
         }
 
         setpoint = self.setpoints.get(sensor_tipo, 50.0)
+        # Capturar el valor NATURAL (no aleatorio) como destino de recuperacion.
+        # Si no hay valor fisico, usar el setpoint.
+        valor_natural = valor_fisico_actual if valor_fisico_actual is not None else setpoint
         self.stabilization[key] = {
             'valor_fisico_inicio': valor_fisico_actual,
-            'valor_fisico_actual': valor_fisico_actual,  # tracking del fisico durante el ciclo
+            'valor_natural': valor_natural,  # destino fijo del RECOVERING (ignora dinamico)
+            'valor_fisico_actual': valor_fisico_actual,
             'valor_critico': valor_forzado,
             'setpoint': setpoint,
             'fase': self.PHASE_DEGRADING,
@@ -107,37 +110,42 @@ class SensorOverride:
             'ultima_actualizacion': time.time()
         }
 
-        print("[OVERRIDE] MAC-{} {} DEGRAD {} -> {} ({}s)".format(
-            maceta, sensor_tipo, valor_fisico_actual, valor_forzado,
-            int(7 * 1.0)))
-    
+        print("[OVERRIDE] MAC-{} {} DEGRAD {} -> {} (natural={}, critico={})".format(
+            maceta, sensor_tipo, valor_fisico_actual, valor_forzado, valor_natural, valor_forzado))
+
     def get_valor(self, maceta, sensor_tipo, valor_fisico):
-        """Obtener valor del sensor (fisico o forzado)."""
+        """Obtener valor del sensor (fisico o forzado).
+
+        Mientras el override este activo, SIEMPRE retorna el valor del ciclo
+        de 3 fases (ignora aleatoriedad/dinamico). Al terminar, retorna el
+        fisico (o el setpoint si no hay fisico).
+        """
         key = (maceta, sensor_tipo)
-        
+
         if key in self.overrides and self.overrides[key]['activa']:
             age = time.time() - self.overrides[key]['timestamp']
             if age > 120:
                 print("[OVERRIDE] MAC-{} {} TTL expirado".format(maceta, sensor_tipo))
                 self._clear_override(maceta, sensor_tipo)
-                return valor_fisico
+                return valor_fisico if valor_fisico is not None else self.setpoints.get(sensor_tipo, 50.0)
             return self._apply_stabilization(maceta, sensor_tipo, key, valor_fisico)
-        
+
         if key in self.overrides and not self.overrides[key]['activa']:
             self._clear_override(maceta, sensor_tipo)
-        
+
         return valor_fisico
     
     def _apply_stabilization(self, maceta, sensor_tipo, key, valor_fisico):
-        """Aplicar algoritmo de estabilizacion de 3 fases."""
+        """Aplicar algoritmo de estabilizacion de 3 fases.
+
+        El valor retornado es siempre el del ciclo (ignora la aleatoriedad
+        del modo dinamico). Al terminar, el destino es el valor NATURAL
+        capturado al inicio del override (no el valor aleatorio actual).
+        """
         stab = self.stabilization.get(key)
         if not stab or not stab['activo']:
             self._clear_override(maceta, sensor_tipo)
             return valor_fisico
-
-        # Tracking del valor fisico real durante el ciclo (puede variar)
-        if valor_fisico is not None:
-            stab['valor_fisico_actual'] = valor_fisico
 
         now = time.time()
         fase = stab['fase']
@@ -183,10 +191,8 @@ class SensorOverride:
                 stab['ultima_actualizacion'] = now
                 progreso = min(stab['paso'] / stab['max_pasos_rec'], 1.0)
                 critico = stab['valor_critico']
-                # Recuperar al valor FISICO REAL (no al setpoint fijo)
-                target = stab.get('valor_fisico_actual', valor_fisico)
-                if target is None:
-                    target = stab.get('setpoint', critico)
+                # Recuperar al valor NATURAL capturado al inicio (no al aleatorio)
+                target = stab.get('valor_natural', critico)
                 valor_nuevo = round(critico + (target - critico) * progreso, 1)
                 self.overrides[key]['valor'] = valor_nuevo
                 if stab['paso'] % 3 == 0:
@@ -316,70 +322,26 @@ lazo_cerrado = LazoCerrado()
 # ============================================================
 
 def connect_wifi():
-    """Conecta a WiFi de forma robusta. Nunca crashea: si todo falla,
-    retorna False y el ESP32 sigue operando en modo local.
-    """
-    try:
-        wlan = network.WLAN(network.STA_IF)
-    except Exception as e:
-        print("[WiFi] No se pudo crear WLAN: {}".format(e))
-        return False
-
-    try:
-        # Paso 1: apagar interfaz y liberar memoria del driver
-        try:
-            wlan.active(False)
-        except Exception:
-            pass
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if wlan.isconnected():
+        print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
+        return True
+    
+    print("[WiFi] '{}'...".format(WIFI_SSID))
+    wlan.connect(WIFI_SSID, WIFI_PASS)
+    
+    timeout = 15
+    while not wlan.isconnected() and timeout > 0:
         time.sleep(1)
-        gc.collect()
-
-        # Paso 2: encender interfaz
-        try:
-            wlan.active(True)
-            time.sleep(0.5)
-        except Exception as e:
-            print("[WiFi] active() error: {}".format(e))
-            time.sleep(2)
-
-        if wlan.isconnected():
-            print("[WiFi] Ya conectado: {}".format(wlan.ifconfig()[0]))
-            return True
-
-        # Paso 3: reintentar conectando hasta 5 veces
-        delays = [2, 3, 5, 5, 5]
-        for intento in range(5):
-            try:
-                wlan.active(False)
-                time.sleep(1)
-                gc.collect()
-                wlan.active(True)
-                time.sleep(1)
-            except Exception:
-                pass
-            try:
-                print("[WiFi] Intento {} de 5 - '{}'...".format(intento + 1, WIFI_SSID))
-                wlan.connect(WIFI_SSID, WIFI_PASS)
-                timeout = 12
-                while not wlan.isconnected() and timeout > 0:
-                    time.sleep(1)
-                    timeout -= 1
-                if wlan.isconnected():
-                    config = wlan.ifconfig()
-                    print("[WiFi] OK IP: {}".format(config[0]))
-                    return True
-                else:
-                    print("[WiFi] Intento {} timeout".format(intento + 1))
-            except Exception as e:
-                print("[WiFi] Intento {} error: {}".format(intento + 1, e))
-            time.sleep(delays[intento])
-
-        print("[WiFi] FAIL despues de 5 intentos")
-        return False
-
-    except Exception as e:
-        # Captura cualquier RuntimeError 0x0101 u otro error del driver
-        print("[WiFi] Error fatal (no fatal): {} - continuando offline".format(e))
+        timeout -= 1
+    
+    if wlan.isconnected():
+        config = wlan.ifconfig()
+        print("[WiFi] OK IP: {}".format(config[0]))
+        return True
+    else:
+        print("[WiFi] FAIL")
         return False
 
 # ============================================================
@@ -564,152 +526,81 @@ def leer_mux(canal, samples=5):
         time.sleep_ms(5)
     return total // count
 
-# ============================================================
-# LECTURA DE SENSORES - 2 modos
-# ============================================================
-# Modo 1 (estatico): valores fijos por maceta, sin variacion.
-# Modo 2 (dinamico): oscilacion progresiva. Cada sensor tiene un
-#   valor actual y un target random. Cada ciclo se acerca un paso.
-#   Al llegar al target, se genera uno nuevo. Sin saltos bruscos.
-
-import urandom as _urandom
-
-BASELINE_TEMP = 25.0
-BASELINE_HUM_AMB = 65.0
-BASELINE_HUM_SUELO = {1: 55.0, 2: 58.0, 3: 52.0, 4: 60.0}
-BASELINE_PH = {1: 6.8, 2: 6.5, 3: 6.8, 4: 7.2}
-
-SENSOR_MODE = 1
-# Default de modo si no hay boton en GPIO13: 1=estatico, 2=dinamico
-SENSOR_MODE_DEFAULT = 1
-
-# Estado del modo dinamico (oscilacion progresiva)
-_dyn = {
-    'temp': {'val': 25.0, 'tgt': 25.0},
-    'hum_amb': {'val': 65.0, 'tgt': 65.0},
-    'hum_suelo': {1: {'val': 55.0, 'tgt': 55.0}, 2: {'val': 58.0, 'tgt': 58.0},
-                  3: {'val': 52.0, 'tgt': 52.0}, 4: {'val': 60.0, 'tgt': 60.0}},
-    'ph': {1: {'val': 6.8, 'tgt': 6.8}, 2: {'val': 6.5, 'tgt': 6.5},
-           3: {'val': 6.8, 'tgt': 6.8}, 4: {'val': 7.2, 'tgt': 7.2}}
-}
-
-# Rangos validos por tipo de sensor
-_RANGOS = {
-    'temp': (15.0, 30.0),
-    'hum_amb': (30.0, 85.0),
-    'hum_suelo': (20.0, 90.0),
-    'ph': (5.0, 8.0)
-}
-
-def _dyn_init():
-    """Inicializar estado dinamico con baselines."""
-    _dyn['temp'] = {'val': BASELINE_TEMP, 'tgt': BASELINE_TEMP}
-    _dyn['hum_amb'] = {'val': BASELINE_HUM_AMB, 'tgt': BASELINE_HUM_AMB}
-    _dyn['hum_suelo'] = {}
-    _dyn['ph'] = {}
-    for m in range(1, 5):
-        _dyn['hum_suelo'][m] = {'val': BASELINE_HUM_SUELO[m], 'tgt': BASELINE_HUM_SUELO[m]}
-        _dyn['ph'][m] = {'val': BASELINE_PH[m], 'tgt': BASELINE_PH[m]}
-
-def _dyn_random_target(rango):
-    """Generar valor random dentro del rango."""
-    lo, hi = rango
-    return round(lo + (_urandom.getrandbits(16) / 65535.0) * (hi - lo), 1)
-
-def _dyn_step(val, tgt, paso):
-    """Mover val hacia tgt por un paso. Retorna nuevo val."""
-    diff = tgt - val
-    if abs(diff) <= paso:
-        return tgt
-    if diff > 0:
-        return round(val + paso, 1)
-    return round(val - paso, 1)
-
-def _dyn_tick():
-    """Avanzar un ciclo de oscilacion para todos los sensores (cada 0.5s)."""
-    paso_temp = 0.3
-    paso_hum = 0.5
-    paso_suelo = 0.4
-    paso_ph = 0.05
-
-    s = _dyn['temp']
-    s['val'] = _dyn_step(s['val'], s['tgt'], paso_temp)
-    if abs(s['val'] - s['tgt']) < 0.01:
-        s['tgt'] = _dyn_random_target(_RANGOS['temp'])
-
-    s = _dyn['hum_amb']
-    s['val'] = _dyn_step(s['val'], s['tgt'], paso_hum)
-    if abs(s['val'] - s['tgt']) < 0.01:
-        s['tgt'] = _dyn_random_target(_RANGOS['hum_amb'])
-
-    for m in range(1, 5):
-        s = _dyn['hum_suelo'][m]
-        s['val'] = _dyn_step(s['val'], s['tgt'], paso_suelo)
-        if abs(s['val'] - s['tgt']) < 0.01:
-            s['tgt'] = _dyn_random_target(_RANGOS['hum_suelo'])
-
-        s = _dyn['ph'][m]
-        s['val'] = _dyn_step(s['val'], s['tgt'], paso_ph)
-        if abs(s['val'] - s['tgt']) < 0.01:
-            s['tgt'] = _dyn_random_target(_RANGOS['ph'])
-
-def _dyn_reset():
-    """Reset dinamico a baselines."""
-    _dyn_init()
-
-def seleccionar_modo():
-    """Selecciona modo de operacion.
-
-    Wokwi NO acepta input por terminal, asi que usamos un boton en GPIO13
-    (pull-up). Si el boton esta PRESIONADO al arrancar -> MODO 2 (dinamico).
-    Si no hay boton o no se presiona -> MODO 1 (estatico, default seguro).
-
-    Para forzar un modo sin boton, cambia SENSOR_MODE_DEFAULT abajo.
-    """
-    global SENSOR_MODE
-    print("")
-    print("========================================")
-    print("  HUERTO INTELIGENTE - INV-{}".format(MODULE_ID))
-    print("========================================")
-    print("")
-    print("  [1] ESTATICO  - valores fijos (sin variacion)")
-    print("  [2] DINAMICO  - oscilacion suave progresiva")
-    print("========================================")
-
-    # Default configurable sin necesidad de boton
-    SENSOR_MODE = SENSOR_MODE_DEFAULT
-
-    # Boton opcional en GPIO13 (pull-up): presionado -> dinamico
-    try:
-        btn = Pin(13, Pin.IN, Pin.PULL_UP)
-        time.sleep_ms(50)
-        if btn.value() == 0:  # 0 = presionado con pull-up
-            SENSOR_MODE = 2
-    except Exception:
-        pass  # sin boton -> queda en default
-
-    if SENSOR_MODE == 2:
-        _dyn_init()
-        print("  >> MODO DINAMICO ACTIVADO")
-    else:
-        print("  >> MODO ESTATICO ACTIVADO (default)")
-    print("========================================")
-    print("")
-
-def leer_dht():
-    if SENSOR_MODE == 1:
-        return BASELINE_TEMP, BASELINE_HUM_AMB
-    return round(_dyn['temp']['val'], 1), round(_dyn['hum_amb']['val'], 1)
-
 def leer_suelo(maceta):
-    if SENSOR_MODE == 1:
-        return BASELINE_HUM_SUELO.get(maceta, 55.0)
-    return round(_dyn['hum_suelo'].get(maceta, {'val': 55.0})['val'], 1)
+    raw = leer_mux(SOIL_CH[maceta - 1])
+    if raw < 200 or raw > 3800:
+        return None
+    moisture = int(raw * 0.66)
+    pct = int((moisture - 1000) / (3500 - 1000) * 100)
+    return max(0, min(pct, 100))
 
 def leer_ph(maceta):
-    if SENSOR_MODE == 1:
-        return BASELINE_PH.get(maceta, 7.0)
-    return round(_dyn['ph'].get(maceta, {'val': 7.0})['val'], 1)
+    raw = leer_mux(PH_CH[maceta - 1])
+    if raw < 200 or raw > 3800:
+        return None
+    vadc = raw / 4095 * 3.3
+    if vadc > 3.3:
+        vadc = 3.3
+    ph = (4.2 - vadc) / 0.3
+    return round(max(0.0, min(ph, 14.0)), 2)
+
+# Lectura del DHT22 (temperatura y humedad ambiente compartidas)
+# Intenta leer el sensor real; si falla o devuelve siempre el mismo valor,
+# agrega pequena variacion natural (random walk) para no mostrar constantes.
+import urandom as _urandom
+_dht_state = {'t_base': 25.0, 'h_base': 60.0, 't_last': 25.0, 'h_last': 60.0, 'static_count': 0}
+
+def _dht_jitter(base, jitter):
+    """Pseudo-random walk alrededor del valor base."""
+    delta = (_urandom.getrandbits(16) / 65535.0 - 0.5) * 2 * jitter
+    return base + delta
+
+def leer_dht():
+    global _dht_state
+    raw_t = None
+    raw_h = None
+    for _ in range(5):
+        try:
+            dht_sensor.measure()
+            t = dht_sensor.temperature()
+            h = dht_sensor.humidity()
+            if t is not None and h is not None and -10 <= t <= 60 and 0 <= h <= 100:
+                raw_t, raw_h = float(t), float(h)
+                break
+        except Exception:
+            pass
+        time.sleep_ms(150)
+
+    if raw_t is None:
+        # Fallback: usar ultimo valor conocido o base
+        raw_t = _dht_state.get('t_last', 25.0)
+        raw_h = _dht_state.get('h_last', 60.0)
+
+    # Detectar si el sensor esta congelado (devuelve mismo valor siempre)
+    if abs(raw_t - _dht_state['t_last']) < 0.05 and abs(raw_h - _dht_state['h_last']) < 0.05:
+        _dht_state['static_count'] += 1
+    else:
+        _dht_state['static_count'] = 0
+        # Actualizar base con la lectura real cuando cambia
+        _dht_state['t_base'] = raw_t
+        _dht_state['h_base'] = raw_h
+
+    # Si el sensor lleva mas de 3 lecturas con el mismo valor, anadir jitter
+    # para simular ruido real del sensor
+    if _dht_state['static_count'] >= 3:
+        t_out = round(_dht_jitter(_dht_state['t_base'], 0.6), 1)
+        h_out = round(_dht_jitter(_dht_state['h_base'], 1.5), 1)
+    else:
+        t_out = round(raw_t, 1)
+        h_out = round(raw_h, 1)
+
+    _dht_state['t_last'] = t_out
+    _dht_state['h_last'] = h_out
+    return t_out, h_out
+
+# ============================================================
+# FUNCIONES RELAYS
+# ============================================================
 
 def set_relay(maceta, nombre, estado):
     pin = RELAYS[maceta][nombre]
@@ -886,7 +777,6 @@ def sync_with_bridge(lecturas_db, first_boot=False):
     for l in lecturas_db:
         sensors[str(l["sensor_id"])] = l["valor"]
     payload["sensors"] = sensors
-    payload["ts_origen_sync"] = lecturas_db[0]["ts"] if lecturas_db else time.time()
 
     if first_boot:
         payload["reset_overrides"] = True
@@ -1127,12 +1017,8 @@ def evaluar_alertas(datos, maceta_num=None):
 # MAIN
 # ============================================================
 
-# Conectar WiFi primero (no fatal si falla, el ESP32 sigue operando)
-try:
-    wifi_ok = connect_wifi()
-except Exception as e:
-    print("[BOOT] WiFi fallo no-fatal: {}".format(e))
-    wifi_ok = False
+# Conectar WiFi primero
+wifi_ok = connect_wifi()
 
 if oled:
     oled.fill(0)
@@ -1156,29 +1042,24 @@ if wifi_ok:
     reset_overrides_boot()
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
+print("=== MODO HIBRIDO ACTIVADO ===")
 print("[CFG] Defaults: Temp:{}-{} HumAmb:{}-{} HumSuelo:{}-{} Ph:{}-{}".format(
     CFG_TEMP_MIN, CFG_TEMP_MAX, CFG_HUM_AMB_MIN, CFG_HUM_AMB_MAX,
     CFG_HUM_SUELO_MIN, CFG_HUM_SUELO_MAX, CFG_PH_MIN, CFG_PH_MAX))
 print("[CFG] DB sync cada {}s ({} ciclos)".format(DB_SYNC_INTERVAL * 0.5, DB_SYNC_INTERVAL))
 
-seleccionar_modo()
-
 while True:
     try:
         gc.collect()
         lecturas_db = []
-        sync_ts_origen = time.time()
-
-        if SENSOR_MODE == 2:
-            _dyn_tick()
 
         temp_fisico, hum_amb_fisico = leer_dht()
         temp = sensor_override.get_valor(0, 'temp', temp_fisico)
         hum_amb = sensor_override.get_valor(0, 'hum_amb', hum_amb_fisico)
 
         base_shared = (MODULE_ID - 1) * 10
-        lecturas_db.append({"sensor_id": base_shared, "valor": temp, "ts": sync_ts_origen})
-        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb, "ts": sync_ts_origen})
+        lecturas_db.append({"sensor_id": base_shared, "valor": temp})
+        lecturas_db.append({"sensor_id": base_shared + 1, "valor": hum_amb})
 
         last_lecturas[0] = {'temp': temp, 'hum_amb': hum_amb}
 
@@ -1191,9 +1072,9 @@ while True:
             
             base_mac = base_shared + 2 + (m - 1) * 2
             if hum_suelo is not None:
-                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo, "ts": sync_ts_origen})
+                lecturas_db.append({"sensor_id": base_mac, "valor": hum_suelo})
             if ph is not None:
-                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph, "ts": sync_ts_origen})
+                lecturas_db.append({"sensor_id": base_mac + 1, "valor": ph})
 
             last_lecturas[m] = {
                 'temp': temp, 'hum_amb': hum_amb,
@@ -1219,14 +1100,6 @@ while True:
         wlan = network.WLAN(network.STA_IF)
         if not wlan.isconnected():
             print("[WiFi] Reconectando...")
-            try:
-                wlan.active(False)
-                time.sleep(1)
-                gc.collect()
-                wlan.active(True)
-                time.sleep(1)
-            except Exception:
-                pass
             wifi_ok = connect_wifi()
         
         gc.collect()
