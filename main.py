@@ -1039,7 +1039,12 @@ sync_counter = 0
 first_sync_done = False
 
 if wifi_ok:
-    reset_overrides_boot()
+    # No desactivamos overrides antiguos en Supabase al boot.
+    # Simplemente los ignoramos en el primer sync (boot_overrides_cleared=False)
+    # para garantizar que la primera lectura reportada sea 100% fisica.
+    # Si el usuario envio overrides DESPUES de un reinicio, se procesan
+    # normalmente a partir del segundo sync.
+    pass
 
 print("=== ESP32 INV-{} INICIADO ===".format(MODULE_ID))
 print("=== MODO HIBRIDO ACTIVADO ===")
