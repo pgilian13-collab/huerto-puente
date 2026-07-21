@@ -71,10 +71,42 @@ var ApiService = (function() {
         return patch(BRIDGE_URL + path, {});
     }
 
+    function setModo(dispositivo_id, modo) {
+        return bridgePost('/api/modo', { dispositivo_id: dispositivo_id, modo: modo });
+    }
+
+    function searchPlants(query, source) {
+        source = source || 'both';
+        return fetch(BRIDGE_URL + '/api/plants/search?q=' + encodeURIComponent(query) + '&source=' + source, {
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .catch(function(e) { console.error('[API] Plant search error:', e); return null; });
+    }
+
+    function getPlantDetails(source, id) {
+        return fetch(BRIDGE_URL + '/api/plants/details/' + source + '/' + encodeURIComponent(id), {
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .catch(function(e) { console.error('[API] Plant details error:', e); return null; });
+    }
+
+    function importPlant(data) {
+        return bridgePost('/api/plants/import', data);
+    }
+
+    function enrichPlants() {
+        return bridgePost('/api/plants/enrich', {});
+    }
+
     return {
         get: get, post: post, patch: patch, del: del,
         sbQuery: sbQuery, sbInsert: sbInsert, sbPatch: sbPatch,
         bridgeGet: bridgeGet, bridgePost: bridgePost, bridgePatch: bridgePatch,
+        setModo: setModo,
+        searchPlants: searchPlants, getPlantDetails: getPlantDetails,
+        importPlant: importPlant, enrichPlants: enrichPlants,
         BRIDGE_URL: BRIDGE_URL, SUPABASE_URL: SUPABASE_URL, SUPABASE_KEY: SUPABASE_KEY
     };
 })();

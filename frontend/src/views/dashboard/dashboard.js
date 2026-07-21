@@ -218,17 +218,46 @@ var DashboardModule = (function() {
 
         // Config
         html += '<div class="panel"><div class="panel-header"><span class="material-icons-round">settings</span><h3>Configuracion de Umbrales</h3><div class="panel-tag">SYS//CONFIG</div></div>';
+
+        // Plant search from APIs
+        html += '<div class="plant-api-search">';
+        html += '<label class="config-label"><span class="material-icons-round">search</span> Buscar planta (Perenual + Trefle)</label>';
+        html += '<div class="plant-search-row">';
+        html += '<input type="text" id="dashApiSearchInput" class="plant-search-input" placeholder="Buscar por nombre... (ej: tomato, monstera, albahaca)">';
+        html += '<div class="plant-api-results" id="dashApiResults" style="display:none"></div>';
+        html += '</div>';
+        html += '</div>';
+
+        // Current plant badge
         html += '<div class="plant-selector-inline">';
-        html += '<label class="config-label"><span class="material-icons-round">eco</span> Planta de esta maceta</label>';
+        html += '<label class="config-label"><span class="material-icons-round">eco</span> Planta asignada</label>';
         html += '<div class="plant-selector-row">';
-        html += '<div class="plant-search-wrap"><input type="text" id="dashPlantSearchInput" class="plant-search-input" placeholder="Buscar planta del catalogo..."><div class="plant-dropdown plant-dropdown-dash" id="dashPlantDropdown"></div></div>';
-        html += '<div class="plant-badge plant-badge-dash" id="dashPlantBadge" style="display:none"><span id="dashPlantBadgeName"></span><button class="plant-badge-remove" id="dashPlantBadgeRemove"><span class="material-icons-round">close</span></button></div>';
+        html += '<div class="plant-badge plant-badge-dash" id="dashPlantBadge" style="display:none"><img id="dashPlantBadgeImg" class="plant-badge-img" src="" alt="" style="display:none"><span id="dashPlantBadgeName"></span><button class="plant-badge-remove" id="dashPlantBadgeRemove"><span class="material-icons-round">close</span></button></div>';
+        html += '<span class="plant-badge-empty" id="dashPlantBadgeEmpty">Sin planta asignada</span>';
         html += '</div>';
         html += '<div class="plant-actions">';
-        html += '<button class="brutalist-btn btn-plant-action" id="btnAddPlantDash"><span class="material-icons-round">add_circle</span><span class="btn-label">Agregar Planta</span></button>';
+        html += '<button class="brutalist-btn btn-plant-action" id="btnAddPlantDash"><span class="material-icons-round">add_circle</span><span class="btn-label">Agregar Manual</span></button>';
         html += '<button class="brutalist-btn btn-plant-action" id="btnShowRecommendationsDash"><span class="material-icons-round">lightbulb</span><span class="btn-label">Recomendaciones</span></button>';
         html += '</div>';
         html += '</div>';
+
+        // Care guide card (hidden by default)
+        html += '<div class="care-guide-card" id="dashCareGuide" style="display:none">';
+        html += '<div class="care-guide-header"><span class="material-icons-round">menu_book</span><span>Guia de Cuidado</span></div>';
+        html += '<div class="care-guide-body" id="dashCareGuideBody"></div>';
+        html += '</div>';
+
+        // Import preview card (hidden by default)
+        html += '<div class="import-preview-card" id="dashImportPreview" style="display:none">';
+        html += '<div class="import-preview-header"><span class="material-icons-round">download</span><span>Vista previa de importacion</span></div>';
+        html += '<div class="import-preview-body" id="dashImportPreviewBody"></div>';
+        html += '<div class="import-preview-actions">';
+        html += '<label class="import-range-toggle"><input type="checkbox" id="dashUseApiRanges" checked> Usar rangos de la API</label>';
+        html += '<button class="brutalist-btn btn-save" id="btnImportPlant"><span class="material-icons-round">file_download</span> Importar y Aplicar</button>';
+        html += '</div>';
+        html += '</div>';
+
+        // Thresholds grid
         html += '<div class="config-grid">';
         html += configItem('Temperatura', u.temp, 'C', 'cfg-temp');
         html += configItem('Humedad Ambiente', u.humAmb, '%', 'cfg-hum');
@@ -646,98 +675,242 @@ var DashboardModule = (function() {
 if (typeof window !== 'undefined') window.DashboardModule = DashboardModule;
 
 // ============================================================
-// Plant Selector inline en Dashboard
+// Plant Selector inline en Dashboard (API-powered)
 // ============================================================
 
 function bindDashPlantSelector() {
-    var input = document.getElementById('dashPlantSearchInput');
-    var dropdown = document.getElementById('dashPlantDropdown');
+    var apiInput = document.getElementById('dashApiSearchInput');
+    var apiResults = document.getElementById('dashApiResults');
     var badge = document.getElementById('dashPlantBadge');
     var badgeName = document.getElementById('dashPlantBadgeName');
+    var badgeImg = document.getElementById('dashPlantBadgeImg');
+    var badgeEmpty = document.getElementById('dashPlantBadgeEmpty');
     var badgeRemove = document.getElementById('dashPlantBadgeRemove');
     var btnAdd = document.getElementById('btnAddPlantDash');
     var btnRec = document.getElementById('btnShowRecommendationsDash');
+    var importPreview = document.getElementById('dashImportPreview');
+    var importBody = document.getElementById('dashImportPreviewBody');
+    var btnImport = document.getElementById('btnImportPlant');
+    var useApiRanges = document.getElementById('dashUseApiRanges');
+    var careGuide = document.getElementById('dashCareGuide');
+    var careGuideBody = document.getElementById('dashCareGuideBody');
 
-    if (!input || !dropdown) return;
+    var _searchTimer = null;
+    var _selectedApiPlant = null;
 
-    function getPlants() {
-        return (typeof ConfigModule !== 'undefined' && ConfigModule.allPlants)
-            ? ConfigModule.allPlants
-            : (window.CATALOGO_PLANTAS || []);
-    }
+    if (!apiInput) return;
 
-    function normalize(s) {
-        return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    }
+    // --- API Search ---
+    apiInput.addEventListener('input', function() {
+        clearTimeout(_searchTimer);
+        var q = apiInput.value.trim();
+        if (q.length < 2) { apiResults.style.display = 'none'; return; }
+        _searchTimer = setTimeout(function() { _doSearch(q); }, 350);
+    });
 
-    function renderDropdown(query) {
-        var plants = getPlants();
-        var q = normalize(query);
-        var filtered = plants.filter(function(p) {
-            return !q || normalize(p.nombre).indexOf(q) !== -1;
-        }).slice(0, 12);
-        if (filtered.length === 0) {
-            dropdown.innerHTML = '<div class="plant-dropdown-empty">Sin resultados</div>';
-            return;
+    apiInput.addEventListener('focus', function() {
+        if (apiInput.value.trim().length >= 2) apiResults.style.display = 'block';
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!apiInput.contains(e.target) && !apiResults.contains(e.target)) {
+            apiResults.style.display = 'none';
         }
-        dropdown.innerHTML = filtered.map(function(p) {
-            return '<div class="plant-dropdown-item" data-id="' + p.id + '">' +
-                '<span class="plant-dropdown-name">' + p.nombre + '</span>' +
-                '<span class="plant-dropdown-range">' + p.temp_min + '-' + p.temp_max + '\u00B0C</span>' +
-                '</div>';
-        }).join('');
-        var items = dropdown.querySelectorAll('.plant-dropdown-item');
-        for (var i = 0; i < items.length; i++) {
-            items[i].addEventListener('click', function() {
-                var id = parseInt(this.getAttribute('data-id'));
-                selectPlantFromCatalog(id);
-                dropdown.classList.remove('active');
-                input.value = '';
+    });
+
+    function _doSearch(q) {
+        apiResults.innerHTML = '<div class="plant-api-loading"><span class="material-icons-round" style="font-size:16px;animation:spin 1s linear infinite">refresh</span> Buscando...</div>';
+        apiResults.style.display = 'block';
+        ApiService.searchPlants(q).then(function(res) {
+            if (!res || !res.ok || !res.results || res.results.length === 0) {
+                apiResults.innerHTML = '<div class="plant-api-empty">Sin resultados para "' + q + '"</div>';
+                return;
+            }
+            _renderApiResults(res.results);
+        });
+    }
+
+    function _renderApiResults(results) {
+        var html = '';
+        for (var i = 0; i < results.length; i++) {
+            var r = results[i];
+            var name = r.perenual_name || r.scientific_name || 'Desconocido';
+            var sci = r.scientific_name || '';
+            var img = r.imagen_url || '';
+            var sources = [];
+            if (r.perenual_id) sources.push('Perenual');
+            if (r.trefle_slug) sources.push('Trefle');
+            html += '<div class="plant-api-item" data-idx="' + i + '">';
+            if (img) html += '<img class="plant-api-thumb" src="' + img + '" alt="" onerror="this.style.display=\'none\'">';
+            html += '<div class="plant-api-info"><div class="plant-api-name">' + name + '</div>';
+            if (sci) html += '<div class="plant-api-sci">' + sci + '</div>';
+            html += '<div class="plant-api-sources">' + sources.join(' + ') + '</div></div>';
+            html += '</div>';
+        }
+        apiResults.innerHTML = html;
+        var items = apiResults.querySelectorAll('.plant-api-item');
+        for (var j = 0; j < items.length; j++) {
+            items[j].addEventListener('click', function() {
+                var idx = parseInt(this.getAttribute('data-idx'));
+                _selectApiPlant(results[idx]);
+                apiResults.style.display = 'none';
             });
         }
     }
 
-    function selectPlantFromCatalog(id) {
-        var plants = getPlants();
-        var plant = plants.find(function(p) { return p.id === id; });
-        if (!plant) return;
-        function setVal(elId, v) {
-            var el = document.getElementById(elId);
-            if (el) el.value = v;
+    function _selectApiPlant(plant) {
+        _selectedApiPlant = plant;
+        // Show badge
+        if (badgeName) badgeName.textContent = plant.perenual_name || plant.scientific_name || 'Planta';
+        if (badgeImg) {
+            if (plant.imagen_url) { badgeImg.src = plant.imagen_url; badgeImg.style.display = 'inline-block'; }
+            else { badgeImg.style.display = 'none'; }
         }
-        setVal('cfg-temp-min', plant.temp_min);
-        setVal('cfg-temp-max', plant.temp_max);
-        setVal('cfg-hum-min', plant.hum_ambiente_min);
-        setVal('cfg-hum-max', plant.hum_ambiente_max);
-        setVal('cfg-humsuelo-min', plant.hum_suelo_min);
-        setVal('cfg-humsuelo-max', plant.hum_suelo_max);
-        setVal('cfg-ph-min', plant.ph_min);
-        setVal('cfg-ph-max', plant.ph_max);
+        if (badge) badge.style.display = 'inline-flex';
+        if (badgeEmpty) badgeEmpty.style.display = 'none';
 
-        if (badge && badgeName) {
-            badgeName.textContent = plant.nombre;
-            badge.style.display = 'inline-flex';
+        // Fetch full details for care guide
+        var details = null;
+        var promises = [];
+        if (plant.perenual_id) promises.push(ApiService.getPlantDetails('perenual', plant.perenual_id));
+        if (plant.trefle_slug) promises.push(ApiService.getPlantDetails('trefle', plant.trefle_slug));
+        if (promises.length > 0) {
+            Promise.all(promises).then(function(resArr) {
+                var perenualDetail = null, trefleDetail = null;
+                for (var k = 0; k < resArr.length; k++) {
+                    if (resArr[k] && resArr[k].ok) {
+                        if (resArr[k].data && resArr[k].data.watering !== undefined) perenualDetail = resArr[k].data;
+                        else if (resArr[k].data && resArr[k].data.growth) trefleDetail = resArr[k].data;
+                    }
+                }
+                _showCareGuide(perenualDetail, trefleDetail);
+                _showImportPreview(plant, perenualDetail, trefleDetail);
+            });
         }
-
-        try {
-            var inv = (AppState.get('currentInv') || 0) + 1;
-            var mac = AppState.get('currentMaceta') || 1;
-            var key = 'huerto_planta_inv' + inv + '_mac' + mac;
-            localStorage.setItem(key, JSON.stringify(plant));
-        } catch (e) {}
     }
 
-    input.addEventListener('input', function() { renderDropdown(input.value); });
-    input.addEventListener('focus', function() {
-        renderDropdown(input.value);
-        dropdown.classList.add('active');
-    });
-    document.addEventListener('click', function(e) {
-        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-            dropdown.classList.remove('active');
+    function _showCareGuide(perenual, trefle) {
+        if (!careGuide || !careGuideBody) return;
+        if (!perenual && !trefle) { careGuide.style.display = 'none'; return; }
+        var html = '';
+        if (perenual) {
+            html += '<div class="care-guide-section">';
+            if (perenual.watering) html += '<div class="care-guide-row"><span class="material-icons-round">water_drop</span><b>Riego:</b> ' + perenual.watering + '</div>';
+            if (perenual.watering_general_benchmark) html += '<div class="care-guide-row"><span class="material-icons-round">schedule</span><b>Intervalo:</b> cada ' + perenual.watering_general_benchmark.value + ' ' + perenual.watering_general_benchmark.unit + '</div>';
+            if (perenual.sunlight && perenual.sunlight.length) html += '<div class="care-guide-row"><span class="material-icons-round">wb_sunny</span><b>Luz:</b> ' + perenual.sunlight.join(', ') + '</div>';
+            if (perenual.care_level) html += '<div class="care-guide-row"><span class="material-icons-round">favorite</span><b>Cuidado:</b> ' + perenual.care_level + '</div>';
+            if (perenual.growth_rate) html += '<div class="care-guide-row"><span class="material-icons-round">trending_up</span><b>Crecimiento:</b> ' + perenual.growth_rate + '</div>';
+            if (perenual.soil && perenual.soil.length) html += '<div class="care-guide-row"><span class="material-icons-round">grass</span><b>Suelo:</b> ' + perenual.soil.join(', ') + '</div>';
+            if (perenual.indoor) html += '<div class="care-guide-row"><span class="material-icons-round">home</span><b>Interior:</b> Si</div>';
+            html += '</div>';
         }
-    });
+        if (trefle && trefle.growth) {
+            var g = trefle.growth;
+            html += '<div class="care-guide-section care-guide-trefle">';
+            html += '<div class="care-guide-subtitle">Datos botanicos (Trefle)</div>';
+            if (g.ph_minimum != null && g.ph_maximum != null) html += '<div class="care-guide-row"><span class="material-icons-round">science</span><b>pH:</b> ' + g.ph_minimum + ' - ' + g.ph_maximum + '</div>';
+            if (g.minimum_temperature && g.minimum_temperature.deg_c != null) html += '<div class="care-guide-row"><span class="material-icons-round">thermostat</span><b>Temp min:</b> ' + g.minimum_temperature.deg_c + '\u00B0C</div>';
+            if (g.maximum_temperature && g.maximum_temperature.deg_c != null) html += '<div class="care-guide-row"><span class="material-icons-round">thermostat</span><b>Temp max:</b> ' + g.maximum_temperature.deg_c + '\u00B0C</div>';
+            if (g.atmospheric_humidity != null) html += '<div class="care-guide-row"><span class="material-icons-round">air</span><b>Humedad aire:</b> ' + g.atmospheric_humidity + '/10</div>';
+            if (g.soil_humidity != null) html += '<div class="care-guide-row"><span class="material-icons-round">water_drop</span><b>Humedad suelo:</b> ' + g.soil_humidity + '/10</div>';
+            html += '</div>';
+        }
+        careGuideBody.innerHTML = html;
+        careGuide.style.display = 'block';
+    }
 
+    function _showImportPreview(apiPlant, perenualDetail, trefleDetail) {
+        if (!importPreview || !importBody) return;
+        var ranges = _calculateRanges(perenualDetail, trefleDetail);
+        var html = '<div class="import-preview-ranges">';
+        html += '<div class="import-range-item"><b>Temp:</b> ' + ranges.temp.min + ' - ' + ranges.temp.max + ' \u00B0C</div>';
+        html += '<div class="import-range-item"><b>Hum Amb:</b> ' + ranges.humAmb.min + ' - ' + ranges.humAmb.max + ' %</div>';
+        html += '<div class="import-range-item"><b>Hum Suelo:</b> ' + ranges.humSuelo.min + ' - ' + ranges.humSuelo.max + ' %</div>';
+        html += '<div class="import-range-item"><b>pH:</b> ' + ranges.ph.min + ' - ' + ranges.ph.max + '</div>';
+        html += '</div>';
+        importBody.innerHTML = html;
+        importPreview.style.display = 'block';
+        _selectedApiPlant._ranges = ranges;
+        _selectedApiPlant._perenualDetail = perenualDetail;
+        _selectedApiPlant._trefleDetail = trefleDetail;
+    }
+
+    function _calculateRanges(perenual, trefle) {
+        var ranges = { temp: {min:15,max:30}, humAmb: {min:30,max:85}, humSuelo: {min:40,max:80}, ph: {min:5.5,max:7.5} };
+        if (trefle && trefle.growth) {
+            var g = trefle.growth;
+            if (g.minimum_temperature && g.minimum_temperature.deg_c != null) ranges.temp.min = g.minimum_temperature.deg_c;
+            if (g.maximum_temperature && g.maximum_temperature.deg_c != null) ranges.temp.max = g.maximum_temperature.deg_c;
+            if (g.ph_minimum != null) ranges.ph.min = g.ph_minimum;
+            if (g.ph_maximum != null) ranges.ph.max = g.ph_maximum;
+            if (g.atmospheric_humidity != null) {
+                ranges.humAmb.min = Math.round(30 + g.atmospheric_humidity * 5.5);
+                ranges.humAmb.max = Math.round(30 + g.atmospheric_humidity * 5.5 + 15);
+            }
+            if (g.soil_humidity != null) {
+                ranges.humSuelo.min = Math.round(40 + g.soil_humidity * 4);
+                ranges.humSuelo.max = Math.round(40 + g.soil_humidity * 4 + 15);
+            }
+        }
+        return ranges;
+    }
+
+    // --- Import button ---
+    if (btnImport) {
+        btnImport.addEventListener('click', function() {
+            if (!_selectedApiPlant) return;
+            var useApi = useApiRanges ? useApiRanges.checked : true;
+            var ranges = _selectedApiPlant._ranges || _calculateRanges(_selectedApiPlant._perenualDetail, _selectedApiPlant._trefleDetail);
+            var payload = {
+                nombre: _selectedApiPlant.perenual_name || _selectedApiPlant.scientific_name,
+                perenual_id: _selectedApiPlant.perenual_id,
+                trefle_slug: _selectedApiPlant.trefle_slug,
+                imagen_url: _selectedApiPlant.imagen_url,
+                scientific_name: _selectedApiPlant.scientific_name,
+            };
+            if (useApi) {
+                payload.temp = ranges.temp;
+                payload.humAmb = ranges.humAmb;
+                payload.humSuelo = ranges.humSuelo;
+                payload.ph = ranges.ph;
+            } else {
+                payload.temp = { min: val('cfg-temp-min',15), max: val('cfg-temp-max',30) };
+                payload.humAmb = { min: val('cfg-hum-min',30), max: val('cfg-hum-max',85) };
+                payload.humSuelo = { min: val('cfg-humsuelo-min',40), max: val('cfg-humsuelo-max',80) };
+                payload.ph = { min: val('cfg-ph-min',5.5), max: val('cfg-ph-max',7.5) };
+            }
+            if (_selectedApiPlant._perenualDetail) {
+                var pd = _selectedApiPlant._perenualDetail;
+                payload.watering = pd.watering;
+                payload.sunlight = (pd.sunlight || []).join(',');
+                payload.care_level = pd.care_level;
+                payload.growth_rate = pd.growth_rate;
+                payload.soil_type = (pd.soil || []).join(',');
+                payload.description = pd.description;
+                payload.familia = pd.family;
+            }
+            btnImport.innerHTML = '<span class="material-icons-round" style="font-size:16px;animation:spin 1s linear infinite">refresh</span> Importando...';
+            ApiService.importPlant(payload).then(function(res) {
+                if (res && res.ok) {
+                    if (window.showToast) showToast('Planta importada correctamente', 'success');
+                    importPreview.style.display = 'none';
+                    if (useApi && ranges) {
+                        function setVal(id, v) { var el = document.getElementById(id); if (el) el.value = v; }
+                        setVal('cfg-temp-min', ranges.temp.min); setVal('cfg-temp-max', ranges.temp.max);
+                        setVal('cfg-hum-min', ranges.humAmb.min); setVal('cfg-hum-max', ranges.humAmb.max);
+                        setVal('cfg-humsuelo-min', ranges.humSuelo.min); setVal('cfg-humsuelo-max', ranges.humSuelo.max);
+                        setVal('cfg-ph-min', ranges.ph.min); setVal('cfg-ph-max', ranges.ph.max);
+                    }
+                } else {
+                    var msg = (res && res.detail) ? res.detail : 'Error al importar';
+                    if (window.showToast) showToast(msg, 'error');
+                }
+                btnImport.innerHTML = '<span class="material-icons-round">file_download</span> Importar y Aplicar';
+            });
+        });
+    }
+
+    // --- Badge remove ---
     if (badgeRemove) {
         badgeRemove.addEventListener('click', function() {
             try {
@@ -746,9 +919,14 @@ function bindDashPlantSelector() {
                 localStorage.removeItem('huerto_planta_inv' + inv + '_mac' + mac);
             } catch (e) {}
             if (badge) badge.style.display = 'none';
+            if (badgeEmpty) badgeEmpty.style.display = 'inline';
+            if (careGuide) careGuide.style.display = 'none';
+            if (importPreview) importPreview.style.display = 'none';
+            _selectedApiPlant = null;
         });
     }
 
+    // --- Add/Recommendations buttons ---
     if (btnAdd) btnAdd.addEventListener('click', function() {
         if (typeof ConfigModule !== 'undefined' && ConfigModule.openAddPlantModal) {
             ConfigModule.openAddPlantModal();
@@ -766,6 +944,7 @@ function bindDashPlantSelector() {
         }
     });
 
+    // --- Restore saved plant ---
     try {
         var inv = (AppState.get('currentInv') || 0) + 1;
         var mac = AppState.get('currentMaceta') || 1;
@@ -773,6 +952,8 @@ function bindDashPlantSelector() {
         if (saved && badge && badgeName) {
             badgeName.textContent = saved.nombre;
             badge.style.display = 'inline-flex';
+            if (badgeEmpty) badgeEmpty.style.display = 'none';
+            if (saved.imagen_url && badgeImg) { badgeImg.src = saved.imagen_url; badgeImg.style.display = 'inline-block'; }
         }
     } catch (e) {}
 }
