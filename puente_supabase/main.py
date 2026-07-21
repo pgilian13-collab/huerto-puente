@@ -47,8 +47,8 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 BRIDGE_SECRET_KEY = os.getenv("BRIDGE_SECRET_KEY", "")
 
-PERENUAL_KEY = os.getenv("PERENUAL_KEY", "")
-TREFLE_TOKEN = os.getenv("TREFLE_TOKEN", "")
+PERENUAL_KEY = os.getenv("PERENUAL_KEY", "") or "sk-w7K36a5eed438cdda18771"
+TREFLE_TOKEN = os.getenv("TREFLE_TOKEN", "") or "usr-hqCLefdgzlDLYpgwHGTb988l637kBroYvZ5uCzblTrg"
 
 PT_HOST = "127.0.0.1"
 PT_PORT = 5000
@@ -85,6 +85,8 @@ async def lifespan(app: FastAPI):
     print(f"  Packet Tracer: {PT_HOST}:{PT_PORT}")
     print(f"  Security: {'API key active' if BRIDGE_SECRET_KEY else 'NO API KEY SET'}")
     print(f"  Almacenamiento: INSERT monitoreo_lecturas (frontend compatible)")
+    print(f"  Perenual: {'OK' if PERENUAL_KEY else 'NO KEY'}")
+    print(f"  Trefle: {'OK' if TREFLE_TOKEN else 'NO TOKEN'}")
     print("=" * 50)
     yield
     await client.aclose()
