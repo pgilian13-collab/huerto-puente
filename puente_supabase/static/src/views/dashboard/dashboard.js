@@ -401,13 +401,92 @@ var DashboardModule = (function() {
         var humSueloRow = data[ids.hum_suelo];
         var phRow = data[ids.ph];
 
-        if (tempRow) setSensor('temp', tempRow.valor_lectura);
-        if (humAmbRow) setSensor('humAmb', humAmbRow.valor_lectura);
-        if (humSueloRow) setSensor('humSuelo', humSueloRow.valor_lectura);
-        if (phRow) setSensor('ph', phRow.valor_lectura);
+        var temp = tempRow ? parseFloat(tempRow.valor_lectura) : null;
+        var humAmb = humAmbRow ? parseFloat(humAmbRow.valor_lectura) : null;
+        var humSuelo = humSueloRow ? parseFloat(humSueloRow.valor_lectura) : null;
+        var ph = phRow ? parseFloat(phRow.valor_lectura) : null;
+
+        if (tempRow) setSensor('temp', temp);
+        if (humAmbRow) setSensor('humAmb', humAmb);
+        if (humSueloRow) setSensor('humSuelo', humSuelo);
+        if (phRow) setSensor('ph', ph);
+
+        // Lazo cerrado en frontend: enciende/apaga actuadores segun umbrales
+        if (temp !== null && humAmb !== null && humSuelo !== null) {
+            evaluateClosedLoop(temp, humAmb, humSuelo);
+        }
 
         setSkeletonActive(false);
         initTooltips();
+    }
+
+    // Estado local del lazo cerrado (histeresis)
+    var _actuatorState = { bomba: false, ventilador: false, pulverizador: false };
+
+    function evaluateClosedLoop(temp, humAmb, humSuelo) {
+        var u = AppState.get('umbrales') || {};
+        if (!u.temp || !u.humAmb || !u.humSuelo) return;
+
+        var tMax = u.temp.max || 30;
+        var tMin = u.temp.min || 15;
+        var haMax = u.humAmb.max || 85;
+        var haMin = u.humAmb.min || 30;
+        var hsMin = u.humSuelo.min || 40;
+        var hsMax = u.humSuelo.max || 80;
+
+        // BOMBA: ON si hum_suelo < MIN, OFF si hum_suelo > MAX
+        if (!_actuatorState.bomba && humSuelo < hsMin) {
+            _setActuatorVisual('bomba', true);
+            _actuatorState.bomba = true;
+        } else if (_actuatorState.bomba && humSuelo > hsMax) {
+            _setActuatorVisual('bomba', false);
+            _actuatorState.bomba = false;
+        }
+
+        // VENTILADOR: ON si temp > MAX o hum_amb > MAX
+        // OFF si temp < (MAX-5) y hum_amb < (MAX-10)
+        var ventShouldOn = (temp > tMax) || (humAmb > haMax);
+        var ventShouldOff = (temp < (tMax - 5)) && (humAmb < (haMax - 10));
+        if (!_actuatorState.ventilador && ventShouldOn) {
+            _setActuatorVisual('ventilador', true);
+            _actuatorState.ventilador = true;
+        } else if (_actuatorState.ventilador && ventShouldOff) {
+            _setActuatorVisual('ventilador', false);
+            _actuatorState.ventilador = false;
+        }
+
+        // PULVERIZADOR: ON si hum_amb < MIN o temp > MAX
+        // OFF si hum_amb > (MIN+30)
+        var pulvShouldOn = (humAmb < haMin) || (temp > tMax);
+        var pulvShouldOff = humAmb > (haMin + 30);
+        if (!_actuatorState.pulverizador && pulvShouldOn) {
+            _setActuatorVisual('pulverizador', true);
+            _actuatorState.pulverizador = true;
+        } else if (_actuatorState.pulverizador && pulvShouldOff) {
+            _setActuatorVisual('pulverizador', false);
+            _actuatorState.pulverizador = false;
+        }
+    }
+
+    function _setActuatorVisual(name, on) {
+        // LED indicator (siempre refleja el estado del lazo cerrado)
+        var led = document.getElementById(name + '-led');
+        if (led) led.classList.toggle('active', on);
+        // Barra de estado
+        var bar = document.getElementById(name + '-bar');
+        if (bar) bar.style.width = on ? '100%' : '0%';
+        // Estado y modo (modo = AUTO cuando se activa por lazo cerrado)
+        var state = document.getElementById(name + '-state');
+        if (state) state.textContent = on ? 'ON' : 'OFF';
+        var mode = document.getElementById(name + '-mode');
+        if (mode) mode.textContent = on ? 'AUTO' : 'STANDBY';
+        // Boton: solo reflejamos visualmente, sin tocar la clase 'off' para
+        // no interferir con el click manual del usuario
+        var btn = document.getElementById('btn-' + name);
+        if (btn) {
+            var label = btn.querySelector('.btn-label');
+            if (label) label.textContent = on ? 'ON' : 'OFF';
+        }
     }
 
     function setSensor(id, value) {
