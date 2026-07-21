@@ -894,7 +894,8 @@ function bindDashPlantSelector() {
             btnImport.innerHTML = '<span class="material-icons-round" style="font-size:16px;animation:spin 1s linear infinite">refresh</span> Importando...';
             ApiService.importPlant(payload).then(function(res) {
                 if (res && res.ok) {
-                    if (window.showToast) window.showToast('Planta importada correctamente', 'success');
+                    var msg = res.updated ? 'Planta actualizada correctamente' : 'Planta importada correctamente';
+                    if (window.showToast) window.showToast(msg, 'success');
                     importPreview.style.display = 'none';
                     if (useApi && ranges) {
                         function setVal(id, v) { var el = document.getElementById(id); if (el) el.value = v; }
