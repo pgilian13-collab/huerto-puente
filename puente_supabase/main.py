@@ -1358,50 +1358,56 @@ async def _trefle_details(slug: str):
 def _merge_plant_results(perenual_list, trefle_list):
     """Fusiona resultados de ambas APIs por nombre cientifico o comun."""
     merged = {}
+    def _safe_lower(x):
+        return (x or "").lower().strip() if x else ""
     # Index trefle by scientific_name and common_name
     trefle_idx = {}
     for t in trefle_list:
-        sn = (t.get("scientific_name") or "").lower().strip()
-        cn = (t.get("common_name") or "").lower().strip()
+        sn = _safe_lower(t.get("scientific_name"))
+        cn = _safe_lower(t.get("common_name"))
         if sn:
             trefle_idx[sn] = t
         if cn:
             trefle_idx[cn] = t
     # Process perenual results
     for p in perenual_list:
-        p_names = [p.get("common_name", "")]
-        for sn in p.get("scientific_name", []):
-            if sn:
-                p_names.append(sn.lower().strip())
-        key = p_names[0].lower().strip() if p_names else str(p.get("id", ""))
+        p_names = []
+        cn_name = _safe_lower(p.get("common_name"))
+        if cn_name:
+            p_names.append(cn_name)
+        for sn in (p.get("scientific_name") or []):
+            sl = _safe_lower(sn)
+            if sl and sl not in p_names:
+                p_names.append(sl)
+        key = p_names[0] if p_names else str(p.get("id", ""))
         match_trefle = None
         for name in p_names:
-            if name.lower().strip() in trefle_idx:
-                match_trefle = trefle_idx[name.lower().strip()]
+            if name in trefle_idx:
+                match_trefle = trefle_idx[name]
                 break
+        sci_list = p.get("scientific_name") or []
         merged[key] = {
             "perenual_id": p.get("id"),
-            "perenual_name": p.get("common_name", ""),
-            "scientific_name": (p.get("scientific_name", [None]) or [None])[0],
+            "perenual_name": p.get("common_name") or "",
+            "scientific_name": sci_list[0] if sci_list else None,
             "imagen_url": (p.get("default_image") or {}).get("small_url") or (p.get("default_image") or {}).get("thumbnail"),
             "other_names": p.get("other_name", []),
             "family": None,
             "trefle_slug": match_trefle.get("slug") if match_trefle else None,
         }
         if match_trefle:
-            merged[key]["trefle_slug"] = match_trefle.get("slug")
             merged[key]["scientific_name"] = merged[key].get("scientific_name") or match_trefle.get("scientific_name")
     # Add trefle-only results
     for t in trefle_list:
-        sn = (t.get("scientific_name") or "").lower().strip()
-        cn = (t.get("common_name") or "").lower().strip()
+        sn = _safe_lower(t.get("scientific_name"))
+        cn = _safe_lower(t.get("common_name"))
         already = False
         for m in merged.values():
-            msn = (m.get("scientific_name") or "").lower().strip()
+            msn = _safe_lower(m.get("scientific_name"))
             if msn and sn and msn == sn:
                 already = True
                 break
-            if m.get("perenual_name", "").lower().strip() == cn:
+            if _safe_lower(m.get("perenual_name")) == cn:
                 already = True
                 break
         if not already and cn:
