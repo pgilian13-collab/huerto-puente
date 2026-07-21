@@ -1168,20 +1168,20 @@ async def _perenual_search(query: str, page: int = 1):
     """Busca plantas en Perenual API con cache."""
     if not PERENUAL_KEY:
         return []
-    cache_key = f"perenual_search_{query}_{page}"
+    cache_key = "perenual_search_" + query.replace(" ", "_") + "_" + str(page)
     # Check cache
     try:
         cached = await client.get(
             f"{SUPABASE_URL}/rest/v1/plant_api_cache",
             params={
                 "api_source": "eq.perenual",
-                "query_text": f"eq.{cache_key}",
+                "api_id": f"eq.{cache_key}",
                 "limit": "1",
             },
             headers=HEADERS_SERVICE,
+            timeout=8,
         )
         if cached.status_code == 200 and cached.json():
-            age = time.time() - cached.json()[0].get("created_at", "")
             return cached.json()[0]["raw_response"].get("data", [])
     except Exception:
         pass
@@ -1205,6 +1205,7 @@ async def _perenual_search(query: str, page: int = 1):
                         "raw_response": data,
                     },
                     headers=HEADERS_SERVICE,
+                    timeout=8,
                 )
             except Exception:
                 pass
@@ -1264,16 +1265,17 @@ async def _trefle_search(query: str, page: int = 1):
     """Busca plantas en Trefle API con cache."""
     if not TREFLE_TOKEN:
         return []
-    cache_key = f"trefle_search_{query}_{page}"
+    cache_key = "trefle_search_" + query.replace(" ", "_") + "_" + str(page)
     try:
         cached = await client.get(
             f"{SUPABASE_URL}/rest/v1/plant_api_cache",
             params={
                 "api_source": "eq.trefle",
-                "query_text": f"eq.{cache_key}",
+                "api_id": f"eq.{cache_key}",
                 "limit": "1",
             },
             headers=HEADERS_SERVICE,
+            timeout=8,
         )
         if cached.status_code == 200 and cached.json():
             return cached.json()[0]["raw_response"].get("data", [])
@@ -1297,6 +1299,7 @@ async def _trefle_search(query: str, page: int = 1):
                         "raw_response": data,
                     },
                     headers=HEADERS_SERVICE,
+                    timeout=8,
                 )
             except Exception:
                 pass
@@ -1417,25 +1420,29 @@ def _merge_plant_results(perenual_list, trefle_list):
 @app.get("/api/plants/search")
 async def search_plants(q: str = "", source: str = "both"):
     """Busca plantas en Perenual y/o Trefle, retorna resultados fusionados."""
-    if not q or len(q) < 2:
-        return {"ok": True, "results": []}
-    perenual_data = []
-    trefle_data = []
-    tasks = []
-    if source in ("both", "perenual"):
-        tasks.append(_perenual_search(q))
-    if source in ("both", "trefle"):
-        tasks.append(_trefle_search(q))
-    if tasks:
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        idx = 0
+    try:
+        if not q or len(q) < 2:
+            return {"ok": True, "results": []}
+        perenual_data = []
+        trefle_data = []
+        tasks = []
         if source in ("both", "perenual"):
-            perenual_data = results[idx] if isinstance(results[idx], list) else []
-            idx += 1
+            tasks.append(_perenual_search(q))
         if source in ("both", "trefle"):
-            trefle_data = results[idx] if isinstance(results[idx], list) else []
-    merged = _merge_plant_results(perenual_data, trefle_data)
-    return {"ok": True, "results": merged, "perenual_count": len(perenual_data), "trefle_count": len(trefle_data)}
+            tasks.append(_trefle_search(q))
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            idx = 0
+            if source in ("both", "perenual"):
+                perenual_data = results[idx] if isinstance(results[idx], list) else []
+                idx += 1
+            if source in ("both", "trefle"):
+                trefle_data = results[idx] if isinstance(results[idx], list) else []
+        merged = _merge_plant_results(perenual_data, trefle_data)
+        return {"ok": True, "results": merged, "perenual_count": len(perenual_data), "trefle_count": len(trefle_data)}
+    except Exception as e:
+        print(f"[PLANTS SEARCH] Error: {e}")
+        return {"ok": True, "results": [], "error": str(e)}
 
 
 @app.get("/api/plants/details/perenual/{species_id}")
