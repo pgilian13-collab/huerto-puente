@@ -45,10 +45,14 @@ DB_SYNC_INTERVAL = 10
 class SensorOverride:
     """Maneja el forzado de valores de sensores por software.
 
-    Ciclo rapido de 3 fases para feedback visible (total ~21s):
+    Ciclo de 3 fases (total ~32s):
     1. DEGRADING (7s): valor fisico actual -> valor critico (7 pasos x 1s)
-    2. HOLDING (2s): se mantiene en valor critico
-    3. RECOVERING (12s): critico -> setpoint ideal (12 pasos x 1s)
+    2. HOLDING (5s): se mantiene en valor critico (visible para el usuario)
+    3. RECOVERING (20s): critico -> valor natural capturado al inicio (20 pasos x 1s)
+
+    Mientras el override este activo, get_valor() SIEMPRE retorna el valor
+    del ciclo (ignora aleatoriedad del modo dinamico). Al terminar el ciclo,
+    el sensor regresa al valor natural capturado (no al aleatorio).
     """
     
     PHASE_DEGRADING = 0
@@ -102,16 +106,16 @@ class SensorOverride:
             'fase': self.PHASE_DEGRADING,
             'paso': 0,
             'max_pasos_deg': 7,
-            'max_pasos_rec': 12,
+            'max_pasos_rec': 20,
             'hold_inicio': 0,
-            'hold_duracion': 2,
+            'hold_duracion': 5,
             'paso_intervalo': 1.0,
             'activo': True,
             'ultima_actualizacion': time.time()
         }
 
-        print("[OVERRIDE] MAC-{} {} DEGRAD {} -> {} (natural={}, critico={})".format(
-            maceta, sensor_tipo, valor_fisico_actual, valor_forzado, valor_natural, valor_forzado))
+        print("[OVERRIDE] MAC-{} {} DEGRAD {} -> {} (hold 5s, recover 20s)".format(
+            maceta, sensor_tipo, valor_fisico_actual, valor_forzado))
 
     def get_valor(self, maceta, sensor_tipo, valor_fisico):
         """Obtener valor del sensor (fisico o forzado).
